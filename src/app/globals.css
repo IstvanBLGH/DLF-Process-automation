@@ -1,26 +1,69 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Culorile de pe fermacuomenie.ro – aceleași ca în aplicația clasică */
+@theme {
+  --color-brand: #700c30;
+  --color-brand-dark: #560824;
+  --color-brand-soft: #f6e9ee;
+  --color-ink: #1d1d1f;
+  --color-muted: #6e6266;
+  --color-line: #e7e1df;
+  --color-canvas: #f5f2f0;
+  --color-good: #1f7a4d;
+  --color-good-soft: #e6f3ec;
+  --color-warn: #a15c00;
+  --color-warn-soft: #fdf1df;
+  --color-bad: #b3261e;
+  --color-bad-soft: #fbe9e7;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --radius-card: 18px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+body {
+  @apply bg-canvas text-ink antialiased;
+  font-size: 17px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer components {
+  .card {
+    @apply rounded-[var(--radius-card)] border border-line bg-white shadow-[0_1px_2px_rgba(0,0,0,.04)];
+  }
+  /* 16px+ ca iOS să nu facă zoom la atingere */
+  .field {
+    @apply w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[17px] outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/15;
+  }
+  .label {
+    @apply mb-1 block text-[13px] font-medium uppercase tracking-wide text-muted;
+  }
+  .btn-primary {
+    @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-5 font-semibold text-white transition active:scale-[.98] disabled:opacity-50;
+  }
+  .btn-secondary {
+    @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-line bg-white px-5 font-semibold text-ink transition active:scale-[.98] disabled:opacity-50;
+  }
+  .btn-ghost {
+    @apply inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-3 font-medium text-brand transition active:bg-brand-soft;
+  }
+  .seg {
+    @apply inline-flex rounded-xl bg-black/5 p-1;
+  }
+  .seg > button {
+    @apply min-h-10 rounded-lg px-4 text-[15px] font-medium text-muted transition;
+  }
+  .seg > button[aria-pressed="true"] {
+    @apply bg-white text-ink shadow-sm;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.pb-safe {
+  padding-bottom: calc(84px + env(safe-area-inset-bottom));
+}
+@media (min-width: 768px) {
+  .pb-safe {
+    padding-bottom: 32px;
+  }
 }

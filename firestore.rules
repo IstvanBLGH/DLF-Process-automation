@@ -1,0 +1,42 @@
+rules_version = '2';
+// Reguli pe roluri. Înlocuiește ADMIN_EMAIL de mai jos cu emailul tău (același ca în firebase-config.js).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signed() { return request.auth != null; }
+    function prof() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function active() { return signed() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && prof().active != false; }
+    function role(rs) { return active() && prof().role in rs; }
+    function staff() { return role(['admin','mgmt','prod','lab','mnt','dep','statie']); }
+
+    match /users/{uid} {
+      allow read: if signed() && (request.auth.uid == uid || role(['admin','mgmt']));
+      allow create: if (signed() && request.auth.uid == uid && request.auth.token.email == 'ADMIN_EMAIL' && request.resource.data.role == 'admin') || role(['admin']);
+      allow update, delete: if role(['admin']);
+    }
+    match /operators/{id} { allow read: if staff(); allow write: if role(['admin']); }
+
+    match /tasks/{id}     { allow read: if staff(); allow write: if role(['admin','prod','lab','mnt','dep']); }
+    match /equipment/{id} { allow read: if staff(); allow write: if role(['admin','mnt']); }
+    match /repairs/{id}   { allow read: if staff(); allow write: if role(['admin','mnt']); }
+    match /checks/{id}    { allow read: if staff(); allow write: if role(['admin','mnt']); }
+    match /rooms/{id}     { allow read: if staff(); allow write: if role(['admin','lab','mnt']); }
+    match /tdays/{id}     { allow read: if staff(); allow write: if role(['admin','lab','mnt']); }
+    match /protel/{id}    { allow read: if staff(); allow write: if role(['admin','prod','lab']); }
+    match /plots/{id}     { allow read: if staff(); allow write: if role(['admin','prod','lab','statie']); }
+    match /pzer/{id}      { allow read: if staff(); allow write: if role(['admin','prod','lab','statie']); }
+    match /lapte/{id}     { allow read: if staff(); allow write: if role(['admin','prod','lab','dep','statie']); }
+    match /trUnit/{id}    { allow read: if staff(); allow write: if role(['admin','prod','dep','statie']); }
+    match /trCont/{id}    { allow read: if staff(); allow write: if role(['admin','prod','dep']); }
+    match /trFoto/{id}    { allow read: if staff(); allow write: if role(['admin','prod','dep','statie']); }
+    match /trLoc/{id}     { allow read: if staff(); allow write: if role(['admin','prod']); }
+    match /trProd/{id}    { allow read: if staff(); allow write: if role(['admin','prod']); }
+    match /trCfg/{id}     { allow read: if staff(); allow write: if role(['admin','prod']); }
+    match /teste/{id}     { allow read: if staff(); allow write: if role(['admin','prod','lab','statie']); }
+    match /testeCfg/{id}  { allow read: if staff(); allow write: if role(['admin','prod','lab']); }
+    match /pCereri/{id}   { allow read: if staff(); allow write: if role(['admin','mnt','dep']); }
+    match /pFurn/{id}     { allow read: if staff(); allow write: if role(['admin','mnt','dep']); }
+    match /pCfg/{id}      { allow read: if staff(); allow write: if role(['admin','mnt','dep']); }
+    match /pontaj/{id}    { allow read: if role(['admin','mgmt']); allow write: if role(['admin']); }
+    match /pontajFoto/{id}{ allow read: if role(['admin','mgmt']); allow write: if role(['admin']); }
+  }
+}

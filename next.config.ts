@@ -1,7 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {
@@ -11,6 +10,13 @@ const nextConfig: NextConfig = {
         as: "*.css",
       },
     },
+  },
+  // Aplicația completă (varianta clasică, un singur fișier HTML) rămâne disponibilă
+  // la /clasic cât timp modulele se mută treptat în React.
+  async redirects() {
+    return [
+      { source: "/clasic", destination: "/legacy/index.html", permanent: false },
+    ];
   },
 };
 
