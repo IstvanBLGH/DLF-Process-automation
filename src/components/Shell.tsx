@@ -65,7 +65,7 @@ export function Shell({ children }: { children: ReactNode }) {
         )}
       </header>
 
-      <main className="pb-safe mx-auto max-w-5xl px-4 pt-5">{children}</main>
+      <main className="pb-safe mx-auto max-w-5xl px-4 pt-6">{children}</main>
 
       {/* Bara de jos, stil iOS (doar pe telefon) */}
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-black/10 bg-white/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden">
@@ -75,7 +75,7 @@ export function Shell({ children }: { children: ReactNode }) {
             const cls = `flex flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] font-medium ${on ? "text-brand" : "text-muted"}`;
             const inner = (
               <>
-                <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
                   {n.icon}
                 </svg>
                 {n.label}

@@ -646,6 +646,56 @@ nav .ti{display:none}
   .tq-rgrid{grid-template-columns:repeat(3,1fr)!important}
 }
 @media (max-width:380px){ .lm-kpis,.lm-cards,.pn-grid,.lm-quick{grid-template-columns:1fr!important} .lm-act{grid-template-columns:1fr 1fr!important} }
+/* Telefon: mai aerisit, mărimi mai mici (câmpurile rămân 16px ca iOS să nu facă zoom) */
+@media (max-width:760px){
+  html,body{font-size:14px;line-height:1.5}
+  main{padding:16px 16px 28px}
+  main h2,main h3{font-size:17px;margin:20px 0 10px}
+  .brand-logo{height:32px!important}
+  .brand h1{font-size:18px}
+  /* titluri și bannere */
+  .doc-hero{padding:16px 18px!important;margin-bottom:18px!important;border-radius:16px!important}
+  .doc-t{font-size:20px!important}
+  .doc-s{font-size:12.5px!important}
+  /* spațiu între blocuri */
+  .stats,.bar{gap:10px;margin-bottom:18px}
+  .lm-kpis,.lm-cards,.pn-grid,.fh-grid,.lm-quick,.tq-board,.tq-acts{gap:12px!important}
+  .pn-grid,.lm-kpis,.lm-cards,.fh-grid{margin-bottom:20px}
+  /* carduri și cifre */
+  .stat{padding:12px 14px}.stat b{font-size:20px}.stat small{font-size:11px}
+  .lm-k b,.pn-k b{font-size:19px!important}
+  .pn-k{padding:14px 16px;gap:6px}
+  .fh-card{padding:16px!important;gap:8px}
+  .lm-q{min-height:64px;padding:12px 14px;column-gap:12px}.lm-q b{font-size:14px!important}.lm-q span{font-size:12px}
+  .lm-q em{width:34px!important;height:34px!important;font-size:17px!important}
+  .pn-s b{font-size:22px}.pn-s span{font-size:11.5px}
+  /* liste */
+  .row,.mrow,.krow,.rrow{padding:14px 14px;gap:8px 12px}
+  .ttl{font-size:14.5px}
+  .det,.meta,.num,.mono{font-size:12.5px}
+  .pill,.urg{font-size:11.5px;padding:3px 9px}
+  .chk{width:24px;height:24px}
+  .hist{font-size:12.5px}
+  /* butoane și câmpuri */
+  .btn{min-height:40px;font-size:14px;padding:8px 14px}
+  .btn.sm{min-height:32px;font-size:12.5px}
+  input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),select{min-height:42px}
+  .f{gap:6px;margin-bottom:16px}
+  .f label{font-size:11px}
+  .seg button{min-height:36px;font-size:13px;padding:6px 12px}
+  .lm-tabs{gap:8px;margin-bottom:16px}
+  .lm-tabs button{min-height:38px!important;font-size:13.5px!important;padding:0 14px}
+  .lm-tabs button em{font-size:15px!important}
+  .ubtns button{font-size:12px}
+  /* ferestre de jos */
+  .modal .card{padding:22px 18px calc(18px + env(safe-area-inset-bottom))!important}
+  .modal .card h2{font-size:18px;margin-bottom:16px}
+  .modal .foot .btn{min-height:46px;font-size:15px}
+  /* bara de jos */
+  nav button{font-size:10px;min-height:46px}
+  nav button .ti{width:22px;height:22px}
+  .toast{font-size:13.5px}
+}
 </style>
 </head>
 <body>
