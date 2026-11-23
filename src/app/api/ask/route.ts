@@ -1,6 +1,7 @@
 // „Întreabă Claude” + citire din poze (etichete, coduri, numărare cutii).
 // Folosit atât de aplicația clasică (/legacy) cât și de modulele React.
-// Variabile: ANTHROPIC_API_KEY (obligatoriu), NEXT_PUBLIC_FIREBASE_API_KEY, ANTHROPIC_MODEL (opțional).
+// Variabile: ANTHROPIC_API_KEY (obligatoriu), ANTHROPIC_MODEL (opțional). Acces doar cu cont logat (token Supabase).
+import { caller } from "@/lib/server";
 
 export const maxDuration = 60;
 
@@ -22,17 +23,7 @@ function cors(origin: string | null): Record<string, string> {
 }
 
 async function userOk(req: Request): Promise<boolean> {
-  const tok = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/, "");
-  const key = process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY;
-  if (!tok || !key) return false;
-  const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${key}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ idToken: tok }),
-  });
-  if (!r.ok) return false;
-  const j = (await r.json()) as { users?: unknown[] };
-  return !!j.users?.length;
+  return !!(await caller(req));
 }
 
 export async function OPTIONS(req: Request) {

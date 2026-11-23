@@ -46,16 +46,21 @@ export function Shell({ children }: { children: ReactNode }) {
               <div className="text-[14px] font-medium">{profile?.name}</div>
               <div className="text-[12px] text-white/60">{profile ? ROLES[profile.role]?.n : ""}</div>
             </div>
+            {profile?.role === "admin" && (
+              <Link href="/admin/import" className="rounded-lg px-2 py-1 text-[13px] text-white/70 hover:text-white">
+                Date
+              </Link>
+            )}
             {!profile?.demo && (
               <button onClick={logout} className="rounded-lg px-2 py-1 text-[13px] text-white/70 hover:text-white">
-                Ieșire
+                {profile?.station ? "Schimbă operatorul" : "Ieșire"}
               </button>
             )}
           </div>
         </div>
         {profile?.demo && (
           <div className="bg-warn px-4 py-1 text-center text-[13px] text-white">
-            Mod demo – Firebase nu e configurat, datele rămân doar în acest browser
+            Mod demo – Supabase nu e configurat, datele rămân doar în acest browser
           </div>
         )}
       </header>

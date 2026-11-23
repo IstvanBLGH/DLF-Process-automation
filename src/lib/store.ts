@@ -1,10 +1,8 @@
 "use client";
-// Strat de date comun: Firestore (producție) sau localStorage (mod demo, fără configurare).
+// Strat de date comun: Supabase (producție) sau localStorage (mod demo, fără configurare).
 // Colecțiile sunt aceleași ca în aplicația clasică: teste, testeCfg, tasks, lapte, trUnit, ...
 import { useEffect, useState } from "react";
-import { collection, deleteDoc, doc, onSnapshot, setDoc } from "firebase/firestore";
-import { dec, enc } from "./codec";
-import { fb, hasFirebase } from "./firebase";
+import { db, hasSupabase } from "./supabase";
 
 export type Doc = { id: string } & Record<string, unknown>;
 
@@ -28,12 +26,13 @@ function localWrite(col: string, rows: Doc[]) {
 }
 
 export function subscribe(col: string, cb: (rows: Doc[]) => void, onErr?: (e: Error) => void): () => void {
-  if (hasFirebase) {
-    return onSnapshot(
-      collection(fb().db, col),
-      (s) => cb(s.docs.map((d) => ({ id: d.id, ...(dec(d.data()) as Record<string, unknown>) }))),
-      (e) => onErr?.(e),
-    );
+  if (hasSupabase) {
+    return db()
+      .collection(col)
+      .onSnapshot(
+        (s) => cb(s.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) }))),
+        (e) => onErr?.(e as Error),
+      );
   }
   const fire = () => cb(localRead(col));
   bus.addEventListener(col, fire);
@@ -48,8 +47,8 @@ export function subscribe(col: string, cb: (rows: Doc[]) => void, onErr?: (e: Er
 
 export async function put<T extends Doc>(col: string, item: T): Promise<void> {
   const { id, ...body } = item;
-  if (hasFirebase) {
-    await setDoc(doc(fb().db, col, id), enc(body) as Record<string, unknown>);
+  if (hasSupabase) {
+    await db().collection(col).doc(id).set(body);
     return;
   }
   const rows = localRead(col);
@@ -60,8 +59,8 @@ export async function put<T extends Doc>(col: string, item: T): Promise<void> {
 }
 
 export async function remove(col: string, id: string): Promise<void> {
-  if (hasFirebase) {
-    await deleteDoc(doc(fb().db, col, id));
+  if (hasSupabase) {
+    await db().collection(col).doc(id).delete();
     return;
   }
   localWrite(

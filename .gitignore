@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# date și chei – nu se urcă pe GitHub
+backup-*.json
+.env*.local

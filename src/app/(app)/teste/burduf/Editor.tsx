@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { calc, classes, clsOf, fTs, n2, num, type Box, type Test } from "@/lib/burduf";
+import { boxKg, calc, classes, clsOf, fTs, n2, num, type Box, type Test } from "@/lib/burduf";
 import { footer, newPdf } from "@/lib/pdf";
 
 const DRAFT = "dt_teste_draft";
@@ -41,14 +41,15 @@ export function Editor({ initial, ro, isNew, onClose, onSave, onDelete }: Props)
   }, [t, dirty]);
 
   // clasa propusă din (brut − tară) / bucăți; operatorul o poate schimba
-  const pKg = num(pend.kg), pN = num(pend.n);
+  const rawKg = num(pend.kg), pN = num(pend.n);
+  const pKg = rawKg != null && rawKg > 100 ? rawKg / 1000 : rawKg; // scris în grame
   const auto = pKg != null && pN ? clsOf(((pKg - (num(t.tara) ?? 0) / 1000) / pN) * 1000, r.C) : null;
   const pCls = pend.c ?? auto;
   const canAdd = pKg != null && pKg > 0 && !!pN && pCls != null;
 
   const addBox = (): Box[] => {
     if (!canAdd) return t.box;
-    const box = [...t.box, { c: pCls!, kg: pend.kg, n: pend.n }];
+    const box = [...t.box, { c: pCls!, kg: pKg!, n: pend.n }];
     set({ box });
     setPend({ kg: "", n: "", c: null });
     kgRef.current?.focus();
@@ -107,8 +108,8 @@ export function Editor({ initial, ro, isNew, onClose, onSave, onDelete }: Props)
         startY: y() + 6,
         head: [["#", "Clasă", "kg brut", "Bucăți", "g/buc net"]],
         body: t.box.map((b, i) => {
-          const net = (num(b.kg) ?? 0) - r.tara / 1000, n = num(b.n) ?? 0;
-          return [String(i + 1), CL[b.c]?.l ?? "", n2(num(b.kg), 3), String(n), n ? n2((net / n) * 1000, 1) : "—"];
+          const net = boxKg(b.kg) - r.tara / 1000, n = num(b.n) ?? 0;
+          return [String(i + 1), CL[b.c]?.l ?? "", n2(boxKg(b.kg), 3), String(n), n ? n2((net / n) * 1000, 1) : "—"];
         }),
       });
     footer(doc);
@@ -209,13 +210,13 @@ export function Editor({ initial, ro, isNew, onClose, onSave, onDelete }: Props)
             {t.box.length > 0 && (
               <ol className="divide-y divide-line rounded-xl border border-line">
                 {t.box.map((b, i) => {
-                  const n = num(b.n) ?? 0, net = (num(b.kg) ?? 0) - r.tara / 1000;
+                  const n = num(b.n) ?? 0, net = boxKg(b.kg) - r.tara / 1000;
                   return (
                     <li key={i} className="flex items-center gap-3 px-3 py-2 text-[15px]">
                       <span className="w-6 text-muted">{i + 1}.</span>
                       <span className={`rounded-md px-2 py-0.5 text-[13px] font-semibold ${TONE[CL[b.c]?.tone ?? "ok"]}`}>{CL[b.c]?.l}</span>
                       <span className="flex-1">
-                        {n2(num(b.kg), 3)} kg · {n} buc · <b>{n ? n2((net / n) * 1000, 1) : "—"} g/buc</b>
+                        {n2(boxKg(b.kg), 3)} kg · {n} buc · <b>{n ? n2((net / n) * 1000, 1) : "—"} g/buc</b>
                       </span>
                       <button
                         type="button"

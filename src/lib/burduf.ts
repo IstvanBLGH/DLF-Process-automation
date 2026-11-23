@@ -34,6 +34,12 @@ export const num = (v: unknown): number | null => {
   return Number.isNaN(x) ? null : x;
 };
 
+/** kg cutie scris din greșeală în grame (ex. 3995 în loc de 3,995): o cutie nu are peste 100 kg */
+export const boxKg = (v: unknown) => {
+  const x = num(v) ?? 0;
+  return x > 100 ? x / 1000 : x;
+};
+
 export const n2 = (x: number | null | undefined, d = 1) =>
   x == null || Number.isNaN(x)
     ? "—"
@@ -71,10 +77,11 @@ export function calc(r: Pick<Test, "cfg" | "tara" | "mode" | "pcs" | "box" | "cl
     (r.box ?? []).forEach((b) => {
       const x = rows[b.c];
       if (!x) return;
-      x.br += num(b.kg) ?? 0;
+      const w = boxKg(b.kg);
+      x.br += w;
       x.cut++;
       x.n += num(b.n) ?? 0;
-      x.kg += (num(b.kg) ?? 0) - tara; // scad tara cutiei
+      x.kg += w - tara; // scad tara cutiei
     });
   } else {
     rows = (r.cls ?? []).slice(0, 4).map((x) => {

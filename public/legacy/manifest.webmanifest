@@ -1,2 +1,0 @@
-{ "name": "Ferma cu Omenie – Director tehnic", "short_name": "Ferma DT", "start_url": "/", "display": "standalone", "background_color": "#f7f2ee", "theme_color": "#0d0b0c", "lang": "ro",
-  "icons": [ { "src": "img/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" } ] }
