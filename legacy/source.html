@@ -4935,6 +4935,7 @@ $("#imFile").onchange=async e=>{ const f=e.target.files[0]; e.target.value=""; i
 const ROLES={
   admin:{n:"Director tehnic / Administrator",tabs:["pn","tasks","maint","fh","pc","pj","us"],fab:["temp","protel","lapte","tr","ts","doc"],home:"tasks"},
   mgmt:{n:"Top management",tabs:["pn","tasks","maint","fh","pc"],fab:["temp","protel","lapte","tr","ts","doc"],home:"pn",ro:true},
+  dg:{n:"Director general",tabs:["pn","fh","pc"],fab:["temp","protel","lapte","tr","ts","doc"],home:"pn",ro:true},
   prod:{n:"Producție",tabs:["tasks","fh"],fab:["protel","tr","ts","lapte","temp","doc"],home:"fh"},
   lab:{n:"Laborator / Calitate",tabs:["tasks","fh"],fab:["lapte","protel","ts","temp","tr","doc"],home:"fh"},
   mnt:{n:"Mentenanță",tabs:["tasks","maint","pc","fh"],fab:["temp","doc"],home:"tasks"},
@@ -4959,7 +4960,7 @@ let tm=0;
 const nf=n=>Math.round(n||0).toLocaleString("ro-RO");
 const fD=h=>h==null?"—":h<48?(Math.round(h*10)/10).toLocaleString("ro-RO")+" h":(Math.round(h/24*10)/10).toLocaleString("ro-RO")+" zile";
 const MODN={tasks:"Task-uri",maint:"Mentenanță",temp:"Temperaturi",lapte:"Gestiune lapte",tr:"Trasabilitate",ts:"Teste",pc:"Piese & comenzi",protel:"PROTEL"};
-function go(m){ if(["tasks","maint","pc"].includes(m)){ document.querySelector(`nav button[data-tab=${m}]`).click(); return; }
+function go(m){ if(["tasks","maint","pc"].includes(m)){ if(!myRole().tabs.includes(m)) return; document.querySelector(`nav button[data-tab=${m}]`).click(); return; }
   document.querySelector("nav button[data-tab=fh]").click(); setTimeout(()=>{ const c=document.querySelector(`#tab-fh [data-fh=${m}]`); if(c) c.click(); },30); }
 function collect(){ const t0=iso(today()), A=[];
   const open=tasks.filter(t=>!t.done), over=open.filter(t=>t.due&&t.due<t0), crit=open.filter(t=>(t.urgency||3)===1);
@@ -4970,18 +4971,19 @@ function collect(){ const t0=iso(today()), A=[];
   const tA=parseInt(($("#nF")?.textContent||"").replace(/\D/g,""))||0; if(tA) A.push({sev:1,mod:"temp",t:`${tA} ${tA===1?"cameră în alertă":"camere în alertă"} de temperatură`,d:"Verifică graficele și camerele afectate."});
   [["lapte",LAPTE],["tr",TR],["ts",TST],["pc",PC]].forEach(([k,M])=>{ try{ (M.alerts?M.alerts():[]).forEach(a=>A.push(a)); }catch(e){} });
   const done7=tasks.filter(t=>t.done&&t.doneAt&&t.doneAt>=iso(new Date(Date.now()-6*864e5))).length;
-  return {A:A.sort((a,b)=>a.sev-b.sev),open,over,crit,late,soon,tA,done7}; }
+  const tabOk=m=>!["tasks","maint","pc"].includes(m)||myRole().tabs.includes(m);
+  return {A:A.filter(a=>tabOk(a.mod)).sort((a,b)=>a.sev-b.sev),open,over,crit,late,soon,tA,done7,tabOk}; }
 function render(){ try{ LAPTE.start(); TR.start(); TST.start(); PC.start(); PROTEL.start&&PROTEL.start(); }catch(e){}
   const D=collect(), L=(()=>{ try{ return LAPTE.kpi(); }catch(e){ return null; } })(), Tk=(()=>{ try{ return TR.kpi(); }catch(e){ return null; } })(), Ts=(()=>{ try{ return TST.kpi(); }catch(e){ return null; } })(), Pk=(()=>{ try{ return PC.kpi(); }catch(e){ return null; } })();
   let lots=0; try{ lots=(PROTEL.P.L||[]).length; }catch(e){}
   const SEV={1:["Urgent","u1","🔴"],2:["Atenție","u2","🟠"],3:["Info","u3","🟡"]};
   const card=(mod,ic,t,big,sub,cls)=>`<button class="pn-k ${cls||""}" data-pn="${mod}"><span>${ic} ${t}</span><b>${big}</b><small>${sub}</small></button>`;
   $("#tab-pn").innerHTML=`<div class="doc-hero"><div><div class="doc-t">Panou management</div><div class="doc-s">Situația fabricii la ${fmt(iso(today()))} · se actualizează automat</div></div><div class="pt-hero-r"><button class="btn sm" data-pn="pdf">⤓ PDF</button></div></div>
-  <div class="pn-sum"><div class="pn-s ${D.A.filter(a=>a.sev===1).length?"bad":"ok"}"><b>${D.A.filter(a=>a.sev===1).length}</b><span>alerte urgente</span></div><div class="pn-s ${D.A.filter(a=>a.sev===2).length?"warn":"ok"}"><b>${D.A.filter(a=>a.sev===2).length}</b><span>de urmărit</span></div><div class="pn-s ok"><b>${D.done7}</b><span>task-uri rezolvate în 7 zile</span></div></div>
+  <div class="pn-sum"><div class="pn-s ${D.A.filter(a=>a.sev===1).length?"bad":"ok"}"><b>${D.A.filter(a=>a.sev===1).length}</b><span>alerte urgente</span></div><div class="pn-s ${D.A.filter(a=>a.sev===2).length?"warn":"ok"}"><b>${D.A.filter(a=>a.sev===2).length}</b><span>de urmărit</span></div>${D.tabOk("tasks")?`<div class="pn-s ok"><b>${D.done7}</b><span>task-uri rezolvate în 7 zile</span></div>`:""}</div>
   <div class="panel"><div class="ptitle">Alerte</div>${D.A.length?D.A.slice(0,40).map(a=>`<div class="pn-a s${a.sev}"><em>${SEV[a.sev][2]}</em><div><b>${esc(a.t)}</b>${a.d?`<div class="hint">${esc(a.d)}</div>`:""}</div><span class="pill">${MODN[a.mod]||a.mod}</span><button class="lm-b" data-pn="${a.mod}">Deschide</button></div>`).join(""):`<div class="pt-msg ok" style="font-size:16px;padding:14px">✓ Nicio alertă – totul e în regulă.</div>`}</div>
   <div class="pn-grid">
-    ${card("tasks","📋","Task-uri",nf(D.open.length),`${D.crit.length} critice · ${D.over.length} cu termen depășit`,D.crit.length?"bad":"")}
-    ${card("maint","🔧","Mentenanță",nf(D.late.length),`depășite · ${D.soon.length} în următoarele 7 zile`,D.late.length?"warn":"")}
+    ${D.tabOk("tasks")?card("tasks","📋","Task-uri",nf(D.open.length),`${D.crit.length} critice · ${D.over.length} cu termen depășit`,D.crit.length?"bad":""):""}
+    ${D.tabOk("maint")?card("maint","🔧","Mentenanță",nf(D.late.length),`depășite · ${D.soon.length} în următoarele 7 zile`,D.late.length?"warn":""):""}
     ${card("temp","🌡","Temperaturi",D.tA?nf(D.tA):"OK",D.tA?"camere în alertă":"toate camerele în limite",D.tA?"bad":"")}
     ${card("lapte","🥛","Lapte în stoc",L?nf(L.tot)+" L":"—",L?`${Math.round(L.tot/L.cap*100)}% din ${nf(L.cap)} L`:"nicio mișcare")}
     ${card("tr","📦","Trasabilitate",Tk?nf(Tk.buc)+" buc":"—",Tk?`${Tk.units} recipiente · timp mediu până la client ${fD(Tk.lead)}`:"")}
@@ -5021,7 +5023,7 @@ function modal(h,body,ok){ $("#mdTr .card").className="card"; $("#mdTr .card").i
 function fNew(){ modal("Cont nou",`<div class="f"><label>Nume</label><input id="unN"></div><div class="f2"><div class="f"><label>Email</label><input id="unE" type="email"></div><div class="f"><label>Parolă inițială (min. 6)</label><input id="unP" type="text"></div></div><div class="f"><label>Rol</label><select id="unR">${roleOpts("prod",[...Object.keys(ROLES).filter(k=>k!=="op"),"statie"])}</select></div>`,async()=>{
   const name=$("#unN").value.trim(), email=$("#unE").value.trim(), pass=$("#unP").value, role=$("#unR").value; if(!name||!email||pass.length<6){ toast("Completează numele, emailul și o parolă de min. 6 caractere."); return; }
   try{ const uid=await window.__fbAdmin.createUser(email,pass); await db.collection("users").doc(uid).set({name,email,role,active:true,created:Date.now()}); closeM(); toast(`Cont creat pentru ${name}`); }
-  catch(e){ toast(e&&e.code==="auth/email-already-in-use"?"Emailul are deja cont.":"Nu s-a putut crea contul."); } }); }
+  catch(e){ const m=String(e&&e.message||""); toast(e&&e.code==="auth/email-already-in-use"||/already.*(registered|exists)/i.test(m)?"Emailul are deja cont.":"Nu s-a putut crea contul: "+(m||"eroare necunoscută")); } }); }
 function fOp(o){ const n=!o; o=o||{id:"o_"+uid(),name:"",role:"op",active:true};
   modal(n?"Operator nou":"Editează operatorul",`<div class="f"><label>Nume</label><input id="uoN" value="${esc(o.name)}"></div><div class="f2"><div class="f"><label>Rol</label><select id="uoR">${roleOpts(o.role,OPROLES)}</select></div><div class="f"><label>PIN (4–6 cifre)${n?"":" – gol = neschimbat"}</label><input id="uoP" inputmode="numeric" maxlength="6"></div></div><label class="pj-chk"><input type="checkbox" id="uoA" ${o.active!==false?"checked":""}> Activ</label>`,async()=>{
   const name=$("#uoN").value.trim(), pin=$("#uoP").value.trim(); if(!name){ toast("Scrie numele."); return; } if((n||pin)&&!/^\d{4,6}$/.test(pin)){ toast("PIN-ul are 4–6 cifre."); return; }

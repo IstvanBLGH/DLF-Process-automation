@@ -110,7 +110,9 @@ language sql stable security definer set search_path = public as $$
   select case
     when c = 'users'                     then doc_id = auth.uid()::text or public.my_role() in ('admin','mgmt')
     when c in ('pontaj','pontajFoto')    then public.my_role() in ('admin','mgmt')
-    else public.my_role() in ('admin','mgmt','prod','lab','mnt','dep','statie')
+    -- Directorul general nu vede task-urile și mentenanța
+    when c in ('tasks','equipment','repairs','checks') then public.my_role() in ('admin','mgmt','prod','lab','mnt','dep','statie')
+    else public.my_role() in ('admin','mgmt','dg','prod','lab','mnt','dep','statie')
   end
 $$;
 
