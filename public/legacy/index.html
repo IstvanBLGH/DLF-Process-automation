@@ -993,7 +993,7 @@ nav .ti{display:none}
     <div class="f" id="lmLF"><label id="lmLL">Cantitate (litri)</label><input type="number" id="lmL" min="0" step="1" inputmode="numeric" placeholder="ex. 12000"></div></div>
   <div class="f2"><div class="f"><label id="lmTkL">Rezervor</label><select id="lmTk"></select></div>
     <div class="f" id="lmToF" hidden><label>În rezervorul</label><select id="lmTo"></select></div></div>
-  <div class="f2" id="lmMilkF" hidden><div class="f"><label>Tip lapte</label><select id="lmMilk"><option value="">(nemodificat)</option><option value="int">Integral (≈4%)</option><option value="deg">Degresat (≈0,05%)</option><option value="std">Standardizat (≈3%)</option></select></div>
+  <div class="f2" id="lmMilkF" hidden><div class="f"><label>Tip lapte</label><select id="lmMilk"><option value="">(nemodificat)</option><option value="int">Integral (≈4%)</option><option value="deg">Degresat (≈0,05%)</option><option value="std">Standardizat (≈3%)</option><option value="cap">Lapte de capră (≈3,5%)</option><option value="oaie">Lapte de oaie (≈6,5%)</option></select></div>
     <div class="f" id="lmFatF"><label>Grăsime (%) – din analiza de laborator</label><input type="number" id="lmFat" step="0.01" inputmode="decimal" placeholder="gol = încă neanalizat"></div></div>
   <div class="f" id="lmPhF" hidden><label id="lmPhL">pH lapte</label><input type="number" id="lmPh" step="0.01" min="4" max="8" inputmode="decimal" placeholder="ex. 6,68"></div>
   <div class="f" id="lmSinceF" hidden><label>Lapte în rezervor din (data/ora – pentru vechime)</label><input type="datetime-local" id="lmSince"></div>
@@ -3429,7 +3429,11 @@ const TKS=[
   {n:3,name:"Rezervor 3",cap:15000,cool:true,c:"#2e6b45"},
   {n:4,name:"Tanc 4",cap:6300,cool:true,c:"#3a6f9a"},
 ];
-const MT={int:{l:"Integral",fat:4.0,c:"#e9d9a4"},deg:{l:"Degresat",fat:0.05,c:"#cfe3ef"},std:{l:"Standardizat",fat:3.0,c:"#f4e58f"},mix:{l:"Mixt",fat:null,c:"#eadfbb"}};
+const MT={int:{l:"Integral",x:"lapte integral",fat:4.0,c:"#e9d9a4"},deg:{l:"Degresat",x:"lapte degresat",fat:0.05,c:"#cfe3ef"},std:{l:"Standardizat",x:"lapte standardizat",fat:3.0,c:"#f4e58f"},
+  cap:{l:"Capră",x:"lapte de capră",fat:3.5,c:"#dcebd0"},oaie:{l:"Oaie",x:"lapte de oaie",fat:6.5,c:"#f0dccd"},mix:{l:"Mixt",x:"lapte mixt",fat:null,c:"#eadfbb"}};
+// specia: capra și oaia nu se amestecă cu laptele de vacă și nu intră în standardizare
+const SP=t=>t==="cap"?"capră":t==="oaie"?"oaie":"vacă";
+const spOf=lots=>[...new Set(lots.map(x=>SP(x.type)))];
 const TY={in:{l:"Intrare",ic:"⬇️",cls:"u4"},out:{l:"Ieșire",ic:"➡️",cls:"u2"},tr:{l:"Transfer",ic:"⇄",cls:"u3"},set:{l:"Inventar",ic:"✎",cls:"u1"},lab:{l:"Analiză",ic:"🧪",cls:"u3"},cip:{l:"Spălare CIP",ic:"🫧",cls:"u4"}};
 const M={rows:[],started:false,disp:{1:0,2:0,3:0,4:0},raf:0,ftank:0,fty:"all",per:"7",sub:"stoc",ty:"in",edit:null,chart:null,last:null,cfg:{}};
 const LSK="dt_lapte", LSC="dt_lapte_cfg";
@@ -3493,7 +3497,7 @@ function tinfo(S,n,use){
   const oldest=s.lots.length?Math.min(...s.lots.map(x=>x.ts)):null;
   const ty=[...new Set(s.lots.map(x=>x.type))]; const type=!ty.length?null:ty.length>1?"mix":ty[0];
   const clean=level<=0&&!!s.lastCip&&!s.dirty;
-  return {n,level,fat,unk,oldest,ageH:oldest?(use-oldest)/36e5:null,type,clean,lastCip:s.lastCip,cipH:s.lastCip?(use-s.lastCip)/36e5:null,empty:level<=0,
+  return {n,level,fat,unk,oldest,ageH:oldest?(use-oldest)/36e5:null,type,sp:spOf(s.lots),clean,lastCip:s.lastCip,cipH:s.lastCip?(use-s.lastCip)/36e5:null,empty:level<=0,
     ph:level>0&&s.ph?s.ph.v:null,phH:level>0&&s.ph?(use-s.ph.ms)/36e5:null,emptyH:level<=0&&!clean&&s.emptyAt?(use-s.emptyAt)/36e5:null};
 }
 
@@ -3519,7 +3523,7 @@ function scene(){
   <defs>
    <linearGradient id="lsteel" x1="0" x2="1"><stop offset="0" stop-color="#7f8a90"/><stop offset=".28" stop-color="#d9dfe2"/><stop offset=".5" stop-color="#f1f4f5"/><stop offset=".78" stop-color="#aab3b8"/><stop offset="1" stop-color="#76828a"/></linearGradient>
    <linearGradient id="lshade" x1="0" x2="1"><stop offset="0" stop-color="#1d2321" stop-opacity=".28"/><stop offset=".22" stop-color="#fff" stop-opacity=".1"/><stop offset=".45" stop-color="#fff" stop-opacity=".35"/><stop offset=".75" stop-color="#1d2321" stop-opacity=".05"/><stop offset="1" stop-color="#1d2321" stop-opacity=".35"/></linearGradient>
-   ${mg("int","#e4d9b4","#fffaf0","#d9cca4")}${mg("deg","#bcd4e2","#eef7fc","#a9c3d3")}${mg("std","#e9d97a","#fff6b8","#d8c764")}
+   ${mg("int","#e4d9b4","#fffaf0","#d9cca4")}${mg("deg","#bcd4e2","#eef7fc","#a9c3d3")}${mg("std","#e9d97a","#fff6b8","#d8c764")}${mg("cap","#c4dab3","#f1f8ea","#b3cba1")}${mg("oaie","#e3c4ae","#fbf0e8","#d4b39b")}
    <linearGradient id="ltop" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#f7f9fa"/><stop offset="1" stop-color="#c3cbcf"/></linearGradient>
    <linearGradient id="lh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9edef"/><stop offset=".5" stop-color="#b8c1c6"/><stop offset="1" stop-color="#7d888e"/></linearGradient>
    <radialGradient id="lf" cx=".35" cy=".3" r=".9"><stop offset="0" stop-color="#f6f8f9"/><stop offset=".6" stop-color="#c2cacf"/><stop offset="1" stop-color="#8e999f"/></radialGradient>
@@ -3572,12 +3576,13 @@ function plan(S,C){
   const big=TKS.filter(t=>t.cap>=V);
   if(!big.length){ R.err=`Niciun rezervor nu are ${nf(V)} L capacitate (maxim ${nf(Math.max(...TKS.map(t=>t.cap)))} L). Scade volumul țintă.`; return R; }
   let tg=+C.tank;
-  if(!tg){ const sc=t=>{ const i=tinfo(S,t.n,use); return i.level>0?2:i.clean?0:1; }; tg=big.slice().sort((a,b)=>sc(a)-sc(b)||a.cap-b.cap)[0].n; R.auto=true; }
+  if(!tg){ const sc=t=>{ const i=tinfo(S,t.n,use); return (i.sp.some(x=>x!=="vacă")?5:0)+(i.level>0?2:i.clean?0:1); }; tg=big.slice().sort((a,b)=>sc(a)-sc(b)||a.cap-b.cap)[0].n; R.auto=true; }
   R.tg=tg; const T=tinfo(S,tg,use), tcap=tk(tg).cap; R.T=T;
   if(V>tcap){ R.err=`${tk(tg).name} are doar ${nf(tcap)} L capacitate – alege alt rezervor sau scade volumul.`; return R; }
+  if(T.level>0&&T.sp.some(x=>x!=="vacă")){ R.err=`${tk(tg).name} conține ${T.sp.map(x=>"lapte de "+x).join(" + ")}. Standardizarea se face doar cu lapte de vacă – alege alt rezervor sau golește-l.`; return R; }
   const Vc=Math.max(0,T.level), Fc=T.fat==null?(T.type?MT[T.type].fat??0:0):T.fat;
   // surse
-  const lots=[]; const unkT=new Set(); TKS.forEach(t=>{ S.st[t.n].lots.forEach(l=>{ if(l.fat==null) unkT.add(t.n); if(t.n!==tg) lots.push({...l,unk:l.fat==null,fat:l.fat==null?MT[l.type].fat:l.fat,tank:t.n,age:(use-l.ts)/36e5}); }); });
+  const lots=[]; const unkT=new Set(); TKS.forEach(t=>{ S.st[t.n].lots.forEach(l=>{ if(l.fat==null&&SP(l.type)==="vacă") unkT.add(t.n); if(t.n!==tg&&SP(l.type)==="vacă") lots.push({...l,unk:l.fat==null,fat:l.fat==null?MT[l.type].fat:l.fat,tank:t.n,age:(use-l.ts)/36e5}); }); });
   const whole=lots.filter(l=>l.fat>=3.3), skim=lots.filter(l=>l.fat<=0.6), other=lots.filter(l=>l.fat>0.6&&l.fat<3.3);
   const PH={}; TKS.forEach(t=>PH[t.n]=tinfo(S,t.n,now)); const lowPh=n=>PH[n].ph!=null&&PH[n].ph<C.phMin;
   const okW=whole.filter(l=>l.age<=C.ageMax&&!lowPh(l.tank)), okS=skim.filter(l=>l.age<=C.ageMax&&!lowPh(l.tank));
@@ -3587,6 +3592,7 @@ function plan(S,C){
   R.Fw=Fw; R.Fs=Fs; R.Wa=Wa; R.Sa=Sa; R.Vc=Vc; R.Fc=Fc;
   // tabel surse (per rezervor)
   TKS.forEach(t=>{ if(t.n===tg) return; const i=tinfo(S,t.n,use); if(i.level<=0) return;
+    if(i.sp.some(x=>x!=="vacă")){ R.srcs.push({n:t.n,level:i.level,fat:i.fat,unk:false,kind:i.sp.map(x=>"Lapte de "+x).join(" + ")+" (nu intră)",ageH:i.ageH,exp:0,bad:true,spx:true,ph:i.ph,phH:i.phH,usable:0}); return; }
     const ls=lots.filter(l=>l.tank===t.n); const exp=ls.filter(l=>l.age>C.ageMax).reduce((a,l)=>a+l.l,0);
     const ef=i.fat??(i.type?MT[i.type].fat:null), kind=ef==null?"?":ef>=3.3?"Integral":ef<=0.6?"Degresat":"Altul (nu intră în plan)";
     const bad=lowPh(t.n); R.srcs.push({n:t.n,level:i.level,fat:i.fat,unk:i.unk>0,kind,ageH:i.ageH,exp:bad?i.level:exp,bad,ph:PH[t.n].ph,phH:PH[t.n].phH,usable:bad?0:i.level-exp}); });
@@ -3691,7 +3697,7 @@ function recs(S,C){
   const rest=inf.filter(i=>i.level>0&&i.level<=C.rest&&!(i.ageH>C.agePref));
   rest.forEach(i=>{ const fa=i.fat;
     const dst=inf.filter(j=>j.n!==i.n&&j.level>0&&j.type===i.type&&!(j.ageH>C.agePref)&&tk(j.n).cap-j.level>=i.level&&(fa==null||j.fat==null||Math.abs(fa-j.fat)<=0.3)&&(j.ageH==null||i.ageH==null||Math.abs(j.ageH-i.ageH)<=C.agePref)).sort((a,b)=>(tk(b.n).cool-tk(a.n).cool)||(b.level-a.level))[0];
-    if(dst&&!out.some(r=>r.k==="cen"&&r.n===dst.n&&r.to===i.n)){ const r={p:"i",n:i.n,k:"cen",to:dst.n,t:`Centralizează: R${i.n} → R${dst.n} (${nf(i.level)} L)`,d:`Rest mic de ${MT[i.type]?.l.toLowerCase()||"lapte"} în ${tk(i.n).name}. Mutat în ${tk(dst.n).name} (același tip${tk(dst.n).cool?", cu răcire":""}), eliberezi ${tk(i.n).name} pentru spălare. Vechimea amestecului = cea a laptelui mai vechi (${hAge(Math.max(i.ageH||0,dst.ageH||0))}).`,acts:[["tr",i.n,dst.n,Math.round(i.level),`⇄ Mută în R${dst.n}`]]}; out.push(r); } });
+    if(dst&&!out.some(r=>r.k==="cen"&&r.n===dst.n&&r.to===i.n)){ const r={p:"i",n:i.n,k:"cen",to:dst.n,t:`Centralizează: R${i.n} → R${dst.n} (${nf(i.level)} L)`,d:`Rest mic de ${MT[i.type]?.x||"lapte"} în ${tk(i.n).name}. Mutat în ${tk(dst.n).name} (același tip${tk(dst.n).cool?", cu răcire":""}), eliberezi ${tk(i.n).name} pentru spălare. Vechimea amestecului = cea a laptelui mai vechi (${hAge(Math.max(i.ageH||0,dst.ageH||0))}).`,acts:[["tr",i.n,dst.n,Math.round(i.level),`⇄ Mută în R${dst.n}`]]}; out.push(r); } });
   return out.sort((a,b)=>P[a.p]-P[b.p]||a.n-b.n);
 }
 function recHTML(S,C){
@@ -3738,7 +3744,7 @@ function render(){
   if(M.sub==="std") el.innerHTML=hero()+stdHTML(S,C);
   else if(M.sub==="rec") el.innerHTML=hero()+recHTML(S,C);
   else if(M.sub==="reg") el.innerHTML=hero()+regHTML(S,C);
-  else { el.innerHTML=hero()+quick()+stocHTML(S,C); const now=Date.now(); TKS.forEach(t=>{ const i=tinfo(S,t.n,now); const k=i.type==="deg"?"deg":i.type==="std"?"std":"int"; const mk=$("#mk"+t.n); if(mk) mk.setAttribute("fill","url(#lm_"+k+")"); }); animate(S.lv); drawChart(S); }
+  else { el.innerHTML=hero()+quick()+stocHTML(S,C); const now=Date.now(); TKS.forEach(t=>{ const i=tinfo(S,t.n,now); const k=["deg","std","cap","oaie"].includes(i.type)?i.type:"int"; const mk=$("#mk"+t.n); if(mk) mk.setAttribute("fill","url(#lm_"+k+")"); }); animate(S.lv); drawChart(S); }
 }
 function alertsHTML(R,link){ if(!R||!R.alerts||!R.alerts.length) return "";
   return `<div class="lm-alerts">${R.alerts.map(a=>`<div class="lm-al ${a.k}"><em>${a.ic}</em><div><b>${esc(a.t)}</b><div>${esc(a.d)}</div><div class="lm-al-a">➜ ${esc(a.a)}</div></div>${link?`<button class="lm-b" data-lm="sub" data-v="std">Vezi planul</button>`:""}</div>`).join("")}</div>`; }
@@ -3755,10 +3761,10 @@ function stocHTML(S,C){
     <div class="lm-k in"><span>Intrat azi</span><b>+${nf(inT)} L</b><small>de la camioane</small></div>
     <div class="lm-k out"><span>Ieșit azi</span><b>−${nf(outT)} L</b><small>spre pasteurizator</small></div></div>
   <div class="panel lm-scenep"><div class="lm-sc-h"><b>Rezervoarele acum</b><span class="hint">nivelul și culoarea laptelui se actualizează la fiecare mișcare</span></div>
-    <div class="lm-leg"><span><i style="background:#f3ead0;border-color:#d9cfa8"></i>Lapte integral</span><span><i style="background:#cfe3ef;border-color:#a9c3d3"></i>Lapte degresat</span><span><i style="background:#f4e58f;border-color:#d8c764"></i>Lapte standardizat</span><span><i style="background:#fff;border:2px solid #2a6f97"></i>Nr. rezervor · litri · % umplere</span></div>${scene()}</div>
+    <div class="lm-leg"><span><i style="background:#f3ead0;border-color:#d9cfa8"></i>Lapte integral</span><span><i style="background:#cfe3ef;border-color:#a9c3d3"></i>Lapte degresat</span><span><i style="background:#f4e58f;border-color:#d8c764"></i>Lapte standardizat</span><span><i style="background:#dcebd0;border-color:#b3cba1"></i>Lapte de capră</span><span><i style="background:#f0dccd;border-color:#d4b39b"></i>Lapte de oaie</span><span><i style="background:#fff;border:2px solid #2a6f97"></i>Nr. rezervor · litri · % umplere</span></div>${scene()}</div>
   ${!M.rows.length?`<div class="panel" style="background:#fffbea;border-color:#f0dc9a"><b>Cum începi</b><div class="hint" style="margin-top:4px">Introdu mai întâi <b>nivelul de acum</b> al fiecărui rezervor (butonul „✎ Inventar”, cu tipul laptelui și de când e în rezervor). Grăsimea o introduci după analiza de la laborator, cu 🧪. Apoi notează recepțiile (⬇), tragerile (➡), transferurile (⇄), analizele (🧪) și spălările (🫧).</div></div>`:""}
   <div class="lm-cards">${TKS.map(t=>{ const i=tinfo(S,t.n,now), v=i.level, p=v/t.cap*100, bad=v<0||p>100.5;
-    const ty=i.type?`<span class="pill" style="background:${MT[i.type].c};color:#4a4020">${MT[i.type].l}${i.fat!=null?" "+nfat(i.fat)+"%":""}</span>${i.unk>0?`<span class="pill u2" title="Introdu analiza de laborator">🧪 neanalizat${i.fat!=null?" parțial":""}</span>`:""}`:`<span class="pill" style="background:#eceeea;color:#68716d">gol</span>`;
+    const ty=i.type?`<span class="pill" style="background:${MT[i.type].c};color:#4a4020">${MT[i.type].l}${i.fat!=null?" "+nfat(i.fat)+"%":""}</span>${i.sp.length>1?`<span class="pill u1" title="${i.sp.join(" + ")}">⚠ specii amestecate</span>`:""}${i.unk>0?`<span class="pill u2" title="Introdu analiza de laborator">🧪 neanalizat${i.fat!=null?" parțial":""}</span>`:""}`:`<span class="pill" style="background:#eceeea;color:#68716d">gol</span>`;
     const wash=v>0?`<span class="pill u3">în uz</span>`:i.clean?`<span class="pill ${i.cipH>C.cipH?"u2":"u4"}">🫧 spălat ${hAge(i.cipH)}</span>`:`<span class="pill u2">⚠ nespălat</span>`;
     return `<div class="lm-card" style="border-top:4px solid ${t.c}"><div class="lm-ch"><span class="st-n" style="background:${t.c}">${t.n}</span><b>${t.name}</b>${t.cool?`<span class="pill" style="background:#e3f1fb;color:#1565a8">❄ răcire</span>`:`<span class="pill" style="background:#eceeea;color:#68716d">menținere</span>`}</div>
       <div class="lm-big ${bad?"bad":""}">${nf(v)} <small>/ ${nf(t.cap)} L</small></div>
@@ -3804,7 +3810,7 @@ function stdHTML(S,C){
       <div class="hint">Limitele de vechime și de valabilitate a spălării sunt valori de lucru puse de mine – <b>confirmă-le cu tehnologul</b>.</div></details></div>`;
   if(R.err) return head+`<div class="pt-msg bad" style="font-size:14px;padding:10px 12px">${esc(R.err)}</div>`;
   const T=R.T, tg=tk(R.tg), ch=R.ch;
-  const srcRows=R.srcs.map(s=>`<tr><td><b>R${s.n}</b></td><td>${s.kind}</td><td>${s.fat!=null?nfat(s.fat)+"%"+(s.unk?" *":""):`<span class="pill u2">neanalizat</span>`}</td><td style="text-align:right">${nf(s.level)} L</td><td>${ageChip(s.ageH,C)}</td><td style="text-align:right">${s.bad?`<span class="pill u1">pH scăzut – exclus</span>`:s.exp>0?`<span class="pill u1">${nf(s.exp)} L prea vechi</span>`:nf(s.usable)+" L"}</td><td>${s.ph!=null?`<span class="pill ${s.bad?"u1":s.phH>C.phValid?"u2":"u4"}" title="măsurat acum ${hAge(s.phH)}">${nph(s.ph)}</span>`:`<span class="hint">—</span>`}</td></tr>`).join("");
+  const srcRows=R.srcs.map(s=>`<tr><td><b>R${s.n}</b></td><td>${s.kind}</td><td>${s.fat!=null?nfat(s.fat)+"%"+(s.unk?" *":""):`<span class="pill u2">neanalizat</span>`}</td><td style="text-align:right">${nf(s.level)} L</td><td>${ageChip(s.ageH,C)}</td><td style="text-align:right">${s.spx?`<span class="pill u3">altă specie</span>`:s.bad?`<span class="pill u1">pH scăzut – exclus</span>`:s.exp>0?`<span class="pill u1">${nf(s.exp)} L prea vechi</span>`:nf(s.usable)+" L"}</td><td>${s.ph!=null?`<span class="pill ${s.bad?"u1":s.phH>C.phValid?"u2":"u4"}" title="măsurat acum ${hAge(s.phH)}">${nph(s.ph)}</span>`:`<span class="hint">—</span>`}</td></tr>`).join("");
   const pr=Math.min(100,Math.max(0,R.Vcur/V*100));
   const recipe=`<div class="lm-rec"><div><span>Rețetă la ${nf(ch.Vf)} L</span><b>${nf(R.Vc)>0?"+ ":""}${nf(ch.W)} L integral + ${nf(ch.S)} L degresat</b></div><div><span>Grăsime estimată</span><b>${nfat(ch.Ff)}%</b></div><div><span>Rezervor</span><b>${tg.name}${R.auto?" (ales automat)":""}</b></div><div><span>Mutări de făcut</span><b>${R.moves||0}</b></div></div>`;
   const state=`<div class="lm-card" style="margin-bottom:12px"><div class="lm-ch"><span class="st-n" style="background:${tg.c}">${tg.n}</span><b>${tg.name}</b> <span class="hint">acum: ${nf(R.Vcur)} L${R.Fcur!=null?` la ${nfat(R.Fcur)}%`:""} · țintă ${nf(V)} L la ${nfat(Ft)}%</span></div><div class="lm-bar"><i style="width:${pr}%;background:${tg.c}"></i></div>${recipe}</div>`;
@@ -3869,6 +3875,8 @@ function preview(){
   if(!(l>=0)||$("#lmL").value===""){ out.className="pt-msg"; out.textContent="Introdu cantitatea ca să vezi nivelul de după mișcare."; return; }
   let msg="",cls="ok"; const chk=(n,v)=>{ const c=tk(n).cap; if(v<0){ cls="bad"; msg+=`${tk(n).name}: nivel NEGATIV (${nf(v)} L) – verifică. `; } else if(v>c){ cls="bad"; msg+=`${tk(n).name}: depășește capacitatea (${nf(v)} / ${nf(c)} L). `; } else msg+=`${tk(n).name}: ${nf(base[n])} → ${nf(v)} L (${Math.round(v/c*100)}%). `; };
   if(ty==="in") chk(k,base[k]+l); else if(ty==="out") chk(k,base[k]-l); else if(ty==="set") chk(k,l); else { if(k===to){ cls="bad"; msg="Alege rezervoare diferite."; } else { chk(k,base[k]-l); chk(to,base[to]+l); const a=SB.st[k], b=tinfo(SB,to,Date.now()); const fa=a.lots.length&&a.lots.every(y=>y.fat!=null)?a.lots.reduce((x,y)=>x+y.l*y.fat,0)/a.lots.reduce((x,y)=>x+y.l,0):null; if(b.level>0&&fa!=null&&b.fat!=null&&Math.abs(fa-b.fat)>0.3){ msg+=`Atenție: amesteci lapte de ${nfat(fa)}% cu lapte de ${nfat(b.fat)}% din ${tk(to).name}. `; if(cls==="ok") cls="warn"; } } }
+  const spIn=ty==="in"?[SP($("#lmMilk").value||"int")]:ty==="tr"&&k!==to?spOf(SB.st[k].lots):[], spT=ty==="in"?k:to;
+  if(spIn.length&&(ty==="in"||ty==="tr")){ const have=spOf(SB.st[spT].lots); const all=[...new Set([...have,...spIn])]; if(have.length&&all.length>1){ msg+=`ATENȚIE: amesteci lapte de ${spIn.join(" + ")} cu lapte de ${have.join(" + ")} din ${tk(spT).name}. Speciile nu se amestecă fără acordul tehnologului. `; cls="bad"; } }
   out.className="pt-msg "+cls; out.textContent=msg;
 }
 async function saveRow(item,okMsg){ try{ await put(item); toast(okMsg); }catch(e){ toast("Nu s-a putut salva. Reîncearcă."); } }
