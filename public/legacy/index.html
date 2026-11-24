@@ -995,6 +995,7 @@ nav .ti{display:none}
     <div class="f" id="lmToF" hidden><label>În rezervorul</label><select id="lmTo"></select></div></div>
   <div class="f2" id="lmMilkF" hidden><div class="f"><label>Tip lapte</label><select id="lmMilk"><option value="">(nemodificat)</option><option value="int">Integral (≈4%)</option><option value="deg">Degresat (≈0,05%)</option><option value="std">Standardizat (≈3%)</option><option value="cap">Lapte de capră (≈3,5%)</option><option value="oaie">Lapte de oaie (≈6,5%)</option></select></div>
     <div class="f" id="lmFatF"><label>Grăsime (%) – din analiza de laborator</label><input type="number" id="lmFat" step="0.01" inputmode="decimal" placeholder="gol = încă neanalizat"></div></div>
+  <div class="f" id="lmAgF" hidden><label>Cu ce ai spălat?</label><select id="lmAg"><option value="soda">Sodă</option><option value="acid">Acid</option><option value="sa">Sodă + acid</option><option value="clat">Doar clătire (apă)</option></select></div>
   <div class="f" id="lmPhF" hidden><label id="lmPhL">pH lapte</label><input type="number" id="lmPh" step="0.01" min="4" max="8" inputmode="decimal" placeholder="ex. 6,68"></div>
   <div class="f" id="lmSinceF" hidden><label>Lapte în rezervor din (data/ora – pentru vechime)</label><input type="datetime-local" id="lmSince"></div>
   <div id="lmInF"><div class="f"><label>Cisternă / furnizor</label><input type="text" id="lmSrc" placeholder="ex. B 123 ABC / Ferma X"></div>
@@ -3434,8 +3435,8 @@ const MT={int:{l:"Integral",x:"lapte integral",fat:4.0,c:"#e9d9a4"},deg:{l:"Degr
 // specia: capra și oaia nu se amestecă cu laptele de vacă și nu intră în standardizare
 const SP=t=>t==="cap"?"capră":t==="oaie"?"oaie":"vacă";
 const spOf=lots=>[...new Set(lots.map(x=>SP(x.type)))];
-const TY={in:{l:"Intrare",ic:"⬇️",cls:"u4"},out:{l:"Ieșire",ic:"➡️",cls:"u2"},tr:{l:"Transfer",ic:"⇄",cls:"u3"},set:{l:"Inventar",ic:"✎",cls:"u1"},lab:{l:"Analiză",ic:"🧪",cls:"u3"},cip:{l:"Spălare CIP",ic:"🫧",cls:"u4"}};
-const M={rows:[],started:false,disp:{1:0,2:0,3:0,4:0},raf:0,ftank:0,fty:"all",per:"7",sub:"stoc",ty:"in",edit:null,chart:null,last:null,cfg:{}};
+const TY={in:{l:"Intrare",ic:"⬇️",cls:"u4"},out:{l:"Ieșire",ic:"➡️",cls:"u2"},tr:{l:"Transfer",ic:"⇄",cls:"u3"},set:{l:"Inventar",ic:"✎",cls:"u1"},lab:{l:"Analiză",ic:"🧪",cls:"u3"},cip:{l:"Spălare",ic:"🫧",cls:"u4"}};
+const M={rows:[],eq:[],all:null,preSel:null,started:false,disp:{1:0,2:0,3:0,4:0},raf:0,ftank:0,fty:"all",per:"7",sub:"stoc",ty:"in",edit:null,chart:null,last:null,cfg:{}};
 const LSK="dt_lapte", LSC="dt_lapte_cfg";
 try{ M.cfg=JSON.parse(localStorage.getItem(LSC)||"{}"); }catch(e){ M.cfg={}; }
 const nf=n=>Math.round(n).toLocaleString("ro-RO");
@@ -3443,6 +3444,22 @@ const nfat=x=>(Math.round(x*100)/100).toLocaleString("ro-RO");
 const nowTs=()=>{ const d=new Date(); return iso(d)+"T"+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); };
 const fTs=t=>t?fmt(t.slice(0,10))+" "+t.slice(11,16):"";
 const tk=n=>TKS[n-1];
+// Vane, trasee și pasteurizator de spălat. Se pot adăuga / redenumi / scoate din „Recomandări”.
+// Se salvează în aceeași colecție „lapte”, ca documente cu type:"eq" (nu sunt mișcări de lapte).
+const DEF_EQ=[
+  {id:"eq_v1",type:"eq",name:"Vană deschisă 1",how:"CIP",every:24,ord:1},
+  {id:"eq_v2",type:"eq",name:"Vană deschisă 2",how:"CIP",every:24,ord:2},
+  {id:"eq_v3",type:"eq",name:"Vană deschisă 3",how:"CIP",every:24,ord:3},
+  {id:"eq_vo",type:"eq",name:"Vană dublă O",how:"CIP",every:24,ord:4},
+  {id:"eq_vd",type:"eq",name:"Vană mare Donido VAT",how:"CIP",every:24,ord:5},
+  {id:"eq_past",type:"eq",name:"Pasteurizator",how:"local",every:24,ord:6},
+];
+const AG={soda:"Sodă",acid:"Acid",sa:"Sodă + acid",clat:"Doar clătire"};
+const HOW={CIP:"CIP",local:"spălare locală"};
+const eqAll=()=>(M.eq&&M.eq.length?M.eq:DEF_EQ).slice().sort((a,b)=>(a.ord||0)-(b.ord||0));
+const eqList=()=>eqAll().filter(e=>e.active!==false);
+const eqBy=id=>eqAll().find(e=>e.id===id);
+const isFull=r=>r.ag!=="clat";
 const visible=()=>!$("#tab-lapte").hidden;
 const hMin=h=>h==null?"":h<1?Math.max(0,Math.round(h*60))+" min":h<6?Math.floor(h)+" h"+(Math.round((h%1)*60)?" "+Math.round((h%1)*60)+" min":""):hAge(h);
 const nph=x=>x==null?"—":(Math.round(x*100)/100).toLocaleString("ro-RO",{minimumFractionDigits:2});
@@ -3450,25 +3467,26 @@ const hAge=h=>h==null?"":h<1?Math.round(h*60)+" min":h<48?Math.round(h)+" h":(h/
 
 function start(){
   if(M.started||mode==="pending") return; M.started=true;
-  if(mode==="db"){ db.collection("lapte").onSnapshot(s=>{ M.rows=s.docs.map(d=>({id:d.id,...d.data()})); rr(); },()=>{}); }
-  else { try{ M.rows=JSON.parse(localStorage.getItem(LSK)||"[]"); }catch(e){ M.rows=[]; } rr(); }
+  if(mode==="db"){ db.collection("lapte").onSnapshot(s=>{ split(s.docs.map(d=>({id:d.id,...d.data()}))); rr(); },()=>{}); }
+  else { try{ M.all=JSON.parse(localStorage.getItem(LSK)||"[]"); }catch(e){ M.all=[]; } split(M.all); rr(); }
 }
+function split(all){ M.eq=all.filter(r=>r.type==="eq"); M.rows=all.filter(r=>r.type!=="eq"); }
 async function put(item){
   const {id,...body}=item;
   if(mode==="db"){ await db.collection("lapte").doc(id).set(body); return; }
-  const i=M.rows.findIndex(x=>x.id===id); if(i>=0) M.rows[i]=item; else M.rows.push(item);
-  try{ localStorage.setItem(LSK,JSON.stringify(M.rows)); }catch(e){} rr();
+  M.all=M.all||[]; const i=M.all.findIndex(x=>x.id===id); if(i>=0) M.all[i]=item; else M.all.push(item);
+  try{ localStorage.setItem(LSK,JSON.stringify(M.all)); }catch(e){} split(M.all); rr();
 }
 async function remove(id){
   if(mode==="db"){ await db.collection("lapte").doc(id).delete(); return; }
-  M.rows=M.rows.filter(x=>x.id!==id); try{ localStorage.setItem(LSK,JSON.stringify(M.rows)); }catch(e){} rr();
+  M.all=(M.all||[]).filter(x=>x.id!==id); try{ localStorage.setItem(LSK,JSON.stringify(M.all)); }catch(e){} split(M.all); rr();
 }
 function rr(){ if(visible()) render(); }
 
 /* ---- calcul: loturi FIFO pe rezervor ---- */
 const lev=s=>s.lots.reduce((a,x)=>a+x.l,0)-s.neg;
 function sim(rows){
-  const st={}; TKS.forEach(t=>st[t.n]={lots:[],neg:0,lastCip:null,dirty:false,ph:null,emptyAt:null});
+  const st={}; TKS.forEach(t=>st[t.n]={lots:[],neg:0,lastCip:null,lastRinse:null,dirty:false,ph:null,emptyAt:null}); const eqW={};
   const phv=r=>r.ph===""||r.ph==null||isNaN(Number(r.ph))?null:Number(r.ph);
   // pH-ul unui amestec: dacă ambele sunt cunoscute se păstrează cel mai mic (prudent), altfel trebuie măsurat din nou
   const phMix=(a,b)=>a&&b?(a.v<=b.v?a:b):null;
@@ -3484,12 +3502,14 @@ function sim(rows){
     else if(r.type==="tr"){ const d=st[r.to]; d.ph=pre[r.to]>1e-6?phMix(d.ph,st[r.tank].ph):st[r.tank].ph; const got=take(r.tank,l); meta.set(r.id,sum(got,r.ts)); got.forEach(g=>give(r.to,g)); const miss=l-got.reduce((a,x)=>a+x.l,0); if(miss>1e-6) give(r.to,{l:miss,ts:ms,fat:null,type:"int"}); }
     else if(r.type==="set"){ const s=st[r.tank]; s.lots=[]; s.neg=0; s.ph=null; if(l>0){ const lt=lotOf(r); s.lots.push(lt); s.dirty=true; meta.set(r.id,{fat:lt.fat,type:lt.type,age:(ms-lt.ts)/36e5}); } }
     else if(r.type==="lab"){ const s=st[r.tank]; if(r.fat!==""&&r.fat!=null) s.lots.forEach(x=>x.fat=Number(r.fat)); if(r.milk) s.lots.forEach(x=>x.type=r.milk); const p=phv(r); if(p!=null&&pre[r.tank]>1e-6) s.ph={v:p,ms}; meta.set(r.id,{fat:r.fat===""||r.fat==null?null:Number(r.fat),type:r.milk||null,age:null}); }
+    else if(r.type==="cip"&&(r.eq||!st[r.tank])){ if(r.eq){ const w=eqW[r.eq]||(eqW[r.eq]={last:null,ag:null,full:null}); w.last=ms; w.ag=r.ag||"sa"; if(isFull(r)) w.full=ms; } }
+    else if(r.type==="cip"&&!isFull(r)){ st[r.tank].lastRinse=ms; } // clătirea nu înlocuiește spălarea cu sodă / acid
     else if(r.type==="cip"){ const s=st[r.tank]; s.lots=[]; s.neg=0; s.lastCip=ms; s.dirty=false; s.ph=null; s.emptyAt=null; }
     // momentul golirii: de aici curge timpul până la spălare
     TKS.forEach(t=>{ const s=st[t.n], now=lev(s); if(now>1e-6) s.emptyAt=null; else if(pre[t.n]>1e-6){ s.emptyAt=ms; s.ph=null; } });
     const lv={}; TKS.forEach(t=>lv[t.n]=lev(st[t.n])); after.set(r.id,lv); hist.push([ms,lv]); }
   const lv={}; TKS.forEach(t=>lv[t.n]=lev(st[t.n]));
-  return {st,lv,after,meta,hist,sorted};
+  return {st,lv,after,meta,hist,sorted,eqW};
 }
 function tinfo(S,n,use){
   const s=S.st[n], level=lev(s), tot=s.lots.reduce((a,x)=>a+x.l,0);
@@ -3498,6 +3518,7 @@ function tinfo(S,n,use){
   const ty=[...new Set(s.lots.map(x=>x.type))]; const type=!ty.length?null:ty.length>1?"mix":ty[0];
   const clean=level<=0&&!!s.lastCip&&!s.dirty;
   return {n,level,fat,unk,oldest,ageH:oldest?(use-oldest)/36e5:null,type,sp:spOf(s.lots),clean,lastCip:s.lastCip,cipH:s.lastCip?(use-s.lastCip)/36e5:null,empty:level<=0,
+    readyH:clean?(use-Math.max(s.lastCip,s.lastRinse||0))/36e5:null,
     ph:level>0&&s.ph?s.ph.v:null,phH:level>0&&s.ph?(use-s.ph.ms)/36e5:null,emptyH:level<=0&&!clean&&s.emptyAt?(use-s.emptyAt)/36e5:null};
 }
 
@@ -3640,7 +3661,7 @@ function plan(S,C){
   }
   R.ch=ch;
   // pași
-  const useCipOld=T.empty&&T.clean&&T.cipH>C.cipH;
+  const useCipOld=T.empty&&T.clean&&T.readyH>C.cipH;
   if(T.empty&&(!T.clean||useCipOld)) R.steps.push({k:"cip",tank:tg,txt:`Spală ${tk(tg).name} (CIP) înainte de umplere`,why:T.lastCip?(T.clean?`Ultima spălare: acum ${hAge(T.cipH)} (peste ${C.cipH} h) – spală din nou.`:`Rezervorul a fost folosit după ultima spălare.`):"Nu există nicio spălare înregistrată pentru acest rezervor.",act:{type:"cip",tank:tg,l:0},btn:"✓ Spălat"});
   const rl=r10(ch.E||0);
   if(rl>=20){ const dest=TKS.filter(t=>t.n!==tg&&t.cap-lev(S.st[t.n])>=rl).sort((a,b)=>(b.cool-a.cool)||((b.cap-lev(S.st[b.n]))-(a.cap-lev(S.st[a.n]))))[0];
@@ -3690,8 +3711,15 @@ function recs(S,C){
     } else if(!i.clean){ const cip=[["cip",i.n,0,0,"🫧 Am spălat"]];
       if(i.emptyH!=null&&i.emptyH>C.washEmpty) add("c",i.n,`${t.name}: golit de ${hMin(i.emptyH)} și nespălat – SPALĂ URGENT`,`Un rezervor golit se spală în cel mult ${C.washEmpty} h: resturile de lapte se usucă pe pereți și se înmulțesc bacteriile. Spală-l acum (CIP) și apasă „🫧 Am spălat”.`,cip);
       else add("a",i.n,`${t.name}: gol, dar nespălat`,i.emptyH!=null?`Golit acum ${hMin(i.emptyH)}. Spală-l în următoarele ${hMin(C.washEmpty-i.emptyH)}, altfel devine urgent.`:"Spală-l acum (CIP), ca să fie gata pentru următoarea umplere.",cip); }
-    else if(i.cipH>C.cipH) add("i",i.n,`${t.name}: spălat acum ${hAge(i.cipH)}`,`Spălarea e mai veche de ${C.cipH} h. Clătește/spală din nou înainte de umplere.`,[["cip",i.n,0,0,"🫧 Am spălat"]]);
+    else if(i.readyH>C.cipH) add("i",i.n,`${t.name}: spălat acum ${hAge(i.cipH)}`,`Spălarea e mai veche de ${C.cipH} h. Clătește/spală din nou înainte de umplere.`,[["cip",i.n,0,0,"🫧 Am spălat"]]);
   });
+  const eqNo=[];
+  eqList().forEach(e=>{ const w=S.eqW&&S.eqW[e.id], ev=+e.every||24, act=[["cip","e:"+e.id,0,0,"🫧 Am spălat"]], mod=e.how==="local"?"Fă spălarea locală":"Fă spălarea CIP";
+    if(!w){ eqNo.push(e.name); return; }
+    const h=w.full!=null?(now-w.full)/36e5:null;
+    if(h==null) out.push({p:"a",n:0,eq:e.id,t:`${e.name} – doar clătire, fără sodă / acid`,d:`Ultima clătire acum ${hAge((now-w.last)/36e5)}. ${mod} cu sodă și/sau acid.`,acts:act});
+    else if(h>ev) out.push({p:"a",n:0,eq:e.id,t:`${e.name} – ultima spălare acum ${hAge(h)}`,d:`Limita este ${ev} h între spălări (ultima: ${AG[w.ag]||"CIP"}${w.last>w.full?`, apoi clătire acum ${hAge((now-w.last)/36e5)}`:""}). ${mod}.`,acts:act}); });
+  if(eqNo.length) out.push({p:"i",n:0,eq:"*",t:`Nicio spălare înregistrată: ${eqNo.join(", ")}`,d:`După următoarea spălare apasă „🫧 Am spălat” și alege vana / traseul, ca să se poată urmări intervalul.`,acts:[]});
   if(noCip.length) out.push({p:"i",n:noCip[0],t:`Nicio spălare înregistrată: ${noCip.map(n=>"R"+n).join(", ")}`,d:`Nu se știe de când sunt în uz fără spălare. La următoarea golire spală-le și apasă „🫧 Am spălat”, ca regula de ${C.cipMax} h să poată fi verificată.`,acts:[]});
   // centralizare resturi
   const rest=inf.filter(i=>i.level>0&&i.level<=C.rest&&!(i.ageH>C.agePref));
@@ -3706,14 +3734,31 @@ function recHTML(S,C){
   const rule=(k,l,st="1")=>`<div class="f"><label>${l}</label><input type="number" data-cfg="${k}" step="${st}" value="${esc(String(C[k]))}"></div>`;
   return `<div class="panel"><div class="ptitle">Recomandări: golire, centralizare, spălare</div>
     <div class="hint">Calculate din conținutul rezervoarelor, vechimea laptelui și spălările înregistrate. Butoanele deschid formularul deja completat — verifici și salvezi.</div></div>
-  ${R.length?R.map((r,i)=>`<div class="lm-rc ${r.p}"><span class="st-n" style="background:${tk(r.n).c}">${r.n}</span><div class="lm-rc-b"><div><span class="pill ${lab[r.p][1]}">${lab[r.p][0]}</span> <b>${esc(r.t)}</b></div><div class="lm-rc-d">${esc(r.d)}</div></div>
+  ${R.length?R.map((r,i)=>`<div class="lm-rc ${r.p}">${r.eq?`<span class="st-n" style="background:#5b6b73">🫧</span>`:`<span class="st-n" style="background:${tk(r.n).c}">${r.n}</span>`}<div class="lm-rc-b"><div><span class="pill ${lab[r.p][1]}">${lab[r.p][0]}</span> <b>${esc(r.t)}</b></div><div class="lm-rc-d">${esc(r.d)}</div></div>
     <div class="lm-rc-a">${r.acts.map((a,j)=>`<button class="lm-b" data-lm="rec" data-i="${i}" data-j="${j}">${esc(a[4])}</button>`).join("")}</div></div>`).join("")
    :`<div class="pt-msg ok" style="font-size:16px;padding:14px">✓ Nicio recomandare acum — rezervoarele respectă regulile de sanitație.</div>`}
   <div class="panel"><div class="ptitle">Reguli de sanitație folosite</div>
     <div class="f2" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
     ${rule("agePref","Se folosește primul după (h)")}${rule("ageMax","Vechime maximă lapte (h)")}${rule("noCool","Max. fără răcire în R1/R2 (h)")}${rule("cipMax","Max. în uz fără spălare (h)")}${rule("cipH","Spălare valabilă pt. umplere (h)")}${rule("rest","Rest mic de centralizat (L)","100")}${rule("washEmpty","Spălare după golire, max. (h)","0.5")}${rule("phMin","pH minim lapte crud","0.01")}${rule("phValid","pH valabil (h de la măsurare)")}</div>
-    <div class="hint">⚠ Valori de lucru propuse de mine. Confirmă-le cu tehnologul și cu procedurile HACCP ale fabricii, apoi modifică-le aici.</div></div>`;
+    <div class="hint">⚠ Valori de lucru propuse de mine. Confirmă-le cu tehnologul și cu procedurile HACCP ale fabricii, apoi modifică-le aici.</div></div>
+  ${eqHTML(S)}`;
 }
+function eqHTML(S){
+  const ed=!document.body.classList.contains("role-ro"), now=Date.now();
+  const last=e=>{ const w=S.eqW&&S.eqW[e.id]; if(!w) return `<span class="pill u2">nicio spălare</span>`; const h=(now-w.last)/36e5, hf=w.full!=null?(now-w.full)/36e5:null, ev=+e.every||24;
+    return `<span class="pill ${hf==null||hf>ev?"u2":"u4"}">${AG[w.ag]||"CIP"} · acum ${hAge(h)}</span>`; };
+  const howSel=(v,id)=>`<select data-eqf="how" ${id}>${Object.entries(HOW).map(([k,l])=>`<option value="${k}" ${v===k?"selected":""}>${l}</option>`).join("")}</select>`;
+  return `<div class="panel"><div class="ptitle">Vane, trasee și pasteurizator</div>
+    <div class="hint" style="margin-bottom:8px">Ce se spală în afară de rezervoare. Le alegi la „🫧 Am spălat”, împreună cu ce ai folosit (sodă, acid sau doar clătire). Dacă intervalul dintre spălări e depășit, apare o recomandare.</div>
+    <div style="overflow-x:auto"><table class="tt"><tr><th>Denumire</th><th>Cum se spală</th><th>Interval (h)</th><th>Ultima spălare</th><th></th></tr>
+    ${eqList().map(e=>`<tr data-eq="${e.id}"><td>${ed?`<input data-eqf="name" value="${esc(e.name)}" style="min-width:170px">`:`<b>${esc(e.name)}</b>`}</td><td>${ed?howSel(e.how):HOW[e.how]||e.how}</td><td>${ed?`<input type="number" data-eqf="every" min="1" step="1" value="${+e.every||24}" style="width:80px">`:(+e.every||24)}</td><td>${last(e)}</td>
+      <td style="white-space:nowrap">${ed?`<button class="btn sm" data-lm="new" data-t="cip" data-k="e:${e.id}">🫧 Am spălat</button> <button class="ico" data-lm="eqdel" title="Scoate din listă">${IC.del}</button>`:""}</td></tr>`).join("")}
+    ${ed?`<tr><td><input id="eqNewN" placeholder="ex. Traseu recepție → R3" style="min-width:170px"></td><td>${howSel("CIP",'id="eqNewH"')}</td><td><input type="number" id="eqNewE" min="1" step="1" value="24" style="width:80px"></td><td></td><td><button class="btn sm pri" data-lm="eqadd">＋ Adaugă traseu</button></td></tr>`:""}
+    </table></div></div>`;
+}
+async function eqSave(e){ // la prima modificare, lista implicită se salvează în bază
+  if(!M.eq.length) for(const d of DEF_EQ) if(d.id!==e.id) await put({...d});
+  await put(e); }
 function recCount(S,C){ try{ return recs(S,C).filter(r=>r.p!=="i").length; }catch(e){ return 0; } }
 function openPre(ty,k,to,l){ openForm(ty,k); if(ty==="tr"&&to){ $("#lmTo").value=to; } if(l) $("#lmL").value=l; preview(); }
 
@@ -3723,7 +3768,7 @@ function periodRows(sorted){
   const d=new Date(); d.setDate(d.getDate()-(M.per==="1"?0:Number(M.per)-1)); const from=iso(d);
   return sorted.filter(r=>r.ts.slice(0,10)>=from);
 }
-function details(r){ const a=[]; if(r.src) a.push((r.type==="out"?"Lot: ":"Cisternă: ")+r.src); if(r.temp!==""&&r.temp!=null) a.push(r.temp+" °C"); if(r.at!==""&&r.at!=null) a.push(r.at+" °T"); if(r.ph!==""&&r.ph!=null) a.push("pH "+nph(Number(r.ph))); if(r.who) a.push(r.who); if(r.note) a.push(r.note); return a.join(" · "); }
+function details(r){ const a=[]; if(r.type==="cip") a.push(AG[r.ag]||"CIP"); if(r.src) a.push((r.type==="out"?"Lot: ":"Cisternă: ")+r.src); if(r.temp!==""&&r.temp!=null) a.push(r.temp+" °C"); if(r.at!==""&&r.at!=null) a.push(r.at+" °T"); if(r.ph!==""&&r.ph!=null) a.push("pH "+nph(Number(r.ph))); if(r.who) a.push(r.who); if(r.note) a.push(r.note); return a.join(" · "); }
 function milkTxt(r,m){ if(r.type==="cip") return ""; const ty=m&&m.type?MT[m.type].l:""; const f=m&&m.fat!=null&&!isNaN(m.fat)?nfat(m.fat)+"%":(m&&m.type&&r.type!=="lab"?"(neanalizat)":""); return [ty,f].filter(Boolean).join(" "); }
 function ageChip(h,C){ if(h==null) return ""; const cls=h>C.ageMax?"u1":h>C.agePref?"u2":"u4"; return `<span class="pill ${cls}">${hAge(h)}</span>`; }
 function subnav(){ const n=M.last?recCount(M.last,cfg()):0; return `<div class="lm-tabs">${[["stoc","🛢","Rezervoare"],["rec","🧹","Recomandări"],["std","⚖️","Standardizare"],["reg","📒","Registru"]].map(([k,i,l])=>`<button data-lm="sub" data-v="${k}" class="${M.sub===k?"on":""}"><em>${i}</em>${l}${k==="rec"&&n?`<span class="lm-badge">${n}</span>`:""}</button>`).join("")}</div>`; }
@@ -3732,7 +3777,7 @@ function quick(){ return `<div class="lm-quick">
   <button class="lm-q out" data-lm="new" data-t="out"><em>➡</em><b>Am tras lapte</b><span>spre pasteurizator</span></button>
   <button class="lm-q tr" data-lm="new" data-t="tr"><em>⇄</em><b>Am mutat lapte</b><span>între rezervoare</span></button>
   <button class="lm-q lab" data-lm="new" data-t="lab"><em>🧪</em><b>Analiză laborator</b><span>grăsime măsurată</span></button>
-  <button class="lm-q cip" data-lm="new" data-t="cip"><em>🫧</em><b>Am spălat rezervorul</b><span>spălare CIP</span></button></div>`; }
+  <button class="lm-q cip" data-lm="new" data-t="cip"><em>🫧</em><b>Am spălat</b><span>rezervor, vană, traseu</span></button></div>`; }
 function hero(){ return `<div class="doc-hero"><div><div class="doc-t">Gestiune lapte</div><div class="doc-s">Rezervoare · registru · standardizare ${nfat(+cfg().Ft)}% · stoc în timp real</div></div>
     <div class="pt-hero-r"><button class="btn sm" data-lm="pdf">⤓ PDF</button><button class="btn sm" data-lm="print">🖨 Printează</button></div></div>`+subnav(); }
 function render(){
@@ -3765,7 +3810,7 @@ function stocHTML(S,C){
   ${!M.rows.length?`<div class="panel" style="background:#fffbea;border-color:#f0dc9a"><b>Cum începi</b><div class="hint" style="margin-top:4px">Introdu mai întâi <b>nivelul de acum</b> al fiecărui rezervor (butonul „✎ Inventar”, cu tipul laptelui și de când e în rezervor). Grăsimea o introduci după analiza de la laborator, cu 🧪. Apoi notează recepțiile (⬇), tragerile (➡), transferurile (⇄), analizele (🧪) și spălările (🫧).</div></div>`:""}
   <div class="lm-cards">${TKS.map(t=>{ const i=tinfo(S,t.n,now), v=i.level, p=v/t.cap*100, bad=v<0||p>100.5;
     const ty=i.type?`<span class="pill" style="background:${MT[i.type].c};color:#4a4020">${MT[i.type].l}${i.fat!=null?" "+nfat(i.fat)+"%":""}</span>${i.sp.length>1?`<span class="pill u1" title="${i.sp.join(" + ")}">⚠ specii amestecate</span>`:""}${i.unk>0?`<span class="pill u2" title="Introdu analiza de laborator">🧪 neanalizat${i.fat!=null?" parțial":""}</span>`:""}`:`<span class="pill" style="background:#eceeea;color:#68716d">gol</span>`;
-    const wash=v>0?`<span class="pill u3">în uz</span>`:i.clean?`<span class="pill ${i.cipH>C.cipH?"u2":"u4"}">🫧 spălat ${hAge(i.cipH)}</span>`:`<span class="pill u2">⚠ nespălat</span>`;
+    const wash=v>0?`<span class="pill u3">în uz</span>`:i.clean?`<span class="pill ${i.readyH>C.cipH?"u2":"u4"}">🫧 spălat ${hAge(i.cipH)}</span>`:`<span class="pill u2">⚠ nespălat</span>`;
     return `<div class="lm-card" style="border-top:4px solid ${t.c}"><div class="lm-ch"><span class="st-n" style="background:${t.c}">${t.n}</span><b>${t.name}</b>${t.cool?`<span class="pill" style="background:#e3f1fb;color:#1565a8">❄ răcire</span>`:`<span class="pill" style="background:#eceeea;color:#68716d">menținere</span>`}</div>
       <div class="lm-big ${bad?"bad":""}">${nf(v)} <small>/ ${nf(t.cap)} L</small></div>
       <div class="lm-bar"><i style="width:${Math.max(0,Math.min(100,p))}%;background:${bad?"var(--u1)":p>90?"var(--u2)":t.c}"></i></div>
@@ -3782,10 +3827,10 @@ function regHTML(S,C){
   return `<div class="panel"><div class="ptitle" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">Registru de lapte și rezervoare
     <span class="seg" style="margin-left:auto">${[["1","Azi"],["7","7 zile"],["30","30 zile"],["all","Tot"]].map(([k,l])=>`<button data-lm="per" data-v="${k}" class="${M.per===k?"on":""}">${l}</button>`).join("")}</span></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px"><span class="seg">${[[0,"Toate rezervoarele"],...TKS.map(t=>[t.n,"R"+t.n])].map(([k,l])=>`<button data-lm="ft" data-v="${k}" class="${tf===k?"on":""}">${l}</button>`).join("")}</span>
-    <span class="seg">${[["all","Toate"],["in","⬇ Intrări"],["out","➡ Ieșiri"],["tr","⇄ Transferuri"],["set","✎ Inventar"],["lab","🧪 Analize"],["cip","🫧 CIP"]].map(([k,l])=>`<button data-lm="fy" data-v="${k}" class="${ft===k?"on":""}">${l}</button>`).join("")}</span></div>
+    <span class="seg">${[["all","Toate"],["in","⬇ Intrări"],["out","➡ Ieșiri"],["tr","⇄ Transferuri"],["set","✎ Inventar"],["lab","🧪 Analize"],["cip","🫧 Spălări"]].map(([k,l])=>`<button data-lm="fy" data-v="${k}" class="${ft===k?"on":""}">${l}</button>`).join("")}</span></div>
     ${rows.length?`<div style="overflow-x:auto"><table class="tt"><tr><th>Data / ora</th><th>Tip</th><th>De unde → unde</th><th>Lapte</th><th style="text-align:right">Litri</th><th>Vechime</th><th style="text-align:right">Nivel după</th><th>Detalii</th><th></th></tr>
     ${rows.map(r=>{ const T=TY[r.type]||TY.in, a=S.after.get(r.id)||{}, m=S.meta.get(r.id); const sg=r.type==="in"?"+":r.type==="out"?"−":"";
-      const fl=r.type==="in"?`Cisternă → <b>R${r.tank}</b>`:r.type==="out"?`<b>R${r.tank}</b> → pasteurizator`:r.type==="tr"?`<b>R${r.tank}</b> → <b>R${r.to}</b>`:`<b>R${r.tank}</b>`;
+      const fl=r.type==="in"?`Cisternă → <b>R${r.tank}</b>`:r.type==="out"?`<b>R${r.tank}</b> → pasteurizator`:r.type==="tr"?`<b>R${r.tank}</b> → <b>R${r.to}</b>`:r.eq?`<b>${esc(eqBy(r.eq)?.name||"Vană / traseu")}</b>`:`<b>R${r.tank}</b>`;
       const af=r.type==="tr"?`R${r.tank}: ${nf(a[r.tank])} · R${r.to}: ${nf(a[r.to])}`:nf(a[r.tank])+" L";
       const eff=tf&&(r.type==="tr"||r.type==="in"||r.type==="out")?` <span class="hint">(${(r.tank===tf?(r.type==="in"?"+":"−"):"+")+nf(r.l)} în R${tf})</span>`:"";
       return `<tr><td style="white-space:nowrap">${fTs(r.ts)}</td><td><span class="pill ${T.cls}">${T.ic} ${T.l}</span></td><td>${fl}${eff}</td><td>${esc(milkTxt(r,m))}</td><td style="text-align:right;font-weight:700;color:${r.type==="in"?"var(--u4)":r.type==="out"?"var(--u2)":"inherit"}">${r.type==="lab"||r.type==="cip"?"":sg+nf(r.l)}</td><td>${m&&m.age!=null&&r.type!=="in"&&r.type!=="lab"?ageChip(m.age,C):""}</td><td style="text-align:right;white-space:nowrap">${r.type==="lab"||r.type==="cip"?"":af}</td><td class="hint">${esc(details(r))}</td>
@@ -3857,9 +3902,12 @@ function setType(ty){ M.ty=ty; $("#lmTy").querySelectorAll("button").forEach(b=>
   $("#lmToF").hidden=ty!=="tr"; $("#lmInF").hidden=ty!=="in"; $("#lmOutF").hidden=ty!=="out";
   $("#lmMilkF").hidden=!(ty==="in"||ty==="set"||ty==="lab"); $("#lmPhF").hidden=!(ty==="in"||ty==="lab"); $("#lmPhL").textContent=ty==="lab"?"pH lapte (măsurat acum)":"pH lapte la recepție"; $("#lmSinceF").hidden=ty!=="set"; $("#lmLF").hidden=(ty==="lab"||ty==="cip");
   $("#lmFatF").querySelector("label").textContent=ty==="lab"?"Grăsime măsurată (%)":"Grăsime (%) – gol = implicit";
-  $("#lmTkL").textContent=ty==="tr"?"Din rezervorul":"Rezervor"; $("#lmLL").textContent=ty==="set"?"Nivel măsurat / real acum (litri)":"Cantitate (litri)"; preview(); }
+  const cur=M.preSel??$("#lmTk").value; M.preSel=null; $("#lmAgF").hidden=ty!=="cip";
+  $("#lmTk").innerHTML=ty==="cip"?`<optgroup label="Rezervoare">${opt(+cur)}</optgroup><optgroup label="Vane, trasee, pasteurizator">${eqList().map(e=>`<option value="e:${e.id}" ${cur==="e:"+e.id?"selected":""}>${esc(e.name)}</option>`).join("")}</optgroup>`:opt(+cur||1);
+  $("#lmTkL").textContent=ty==="tr"?"Din rezervorul":ty==="cip"?"Ce ai spălat?":"Rezervor"; $("#lmLL").textContent=ty==="set"?"Nivel măsurat / real acum (litri)":"Cantitate (litri)"; preview(); }
 function openForm(ty,k,row){
   M.edit=row||null; $("#lmH").textContent=row?"Editează mișcarea":"Mișcare lapte";
+  M.preSel=row?(row.eq?"e:"+row.eq:String(row.tank)):(typeof k==="string"?k:k?String(k):null); $("#lmAg").value=row&&row.ag?row.ag:"soda";
   $("#lmTk").innerHTML=opt(row?row.tank:(k||0)); if(!row&&!k) $("#lmTk").selectedIndex=0;
   $("#lmTo").innerHTML=opt(row&&row.to?row.to:(k?(k%4)+1:2));
   $("#lmTs").value=row?row.ts:nowTs(); $("#lmL").value=row?row.l:""; $("#lmSrc").value=row?row.src||"":""; $("#lmSrc2").value=row?row.src||"":"";
@@ -3871,6 +3919,8 @@ function preview(){
   const SB=M.edit?sim(M.rows.filter(r=>r.id!==M.edit.id)):S, base=SB.lv;
   if(ty==="lab"){ const f=parseFloat($("#lmFat").value), ph=parseFloat($("#lmPh").value), C=cfg(); const i=tinfo(SB,k,Date.now()); const low=!isNaN(ph)&&ph<C.phMin; out.className="pt-msg"+(i.level>0&&low?" bad":"");
     out.textContent=i.level>0?`${tk(k).name}: acum ${nf(i.level)} L${i.fat!=null?` la ${nfat(i.fat)}%`:""}${i.ageH!=null?`, lapte de ${hAge(i.ageH)}`:""}. ${isNaN(f)&&isNaN(ph)?"Introdu grăsimea și/sau pH-ul măsurat.":[!isNaN(f)?"Grăsime: "+nfat(f)+"%":"",!isNaN(ph)?"pH: "+nph(ph)+(low?` – SUB ${nph(C.phMin)}: nu se amestecă, sună tehnologul.`:" – bun."):""].filter(Boolean).join(" · ")}`:`${tk(k).name} este gol – nu are ce analiza.`; return; }
+  if(ty==="cip"&&String($("#lmTk").value).startsWith("e:")){ const e=eqBy($("#lmTk").value.slice(2)); out.className="pt-msg ok"; out.textContent=`${e?e.name:"Vană / traseu"}: ${AG[$("#lmAg").value]}${e&&e.how==="local"?" (spălare locală)":""}.`; return; }
+  if(ty==="cip"&&$("#lmAg").value==="clat"){ const i=tinfo(SB,k,Date.now()); out.className="pt-msg "+(i.level>0?"bad":"warn"); out.textContent=i.level>0?`${tk(k).name} NU e gol (${nf(i.level)} L).`:`Doar clătire: ${tk(k).name} ${i.clean?"rămâne spălat – clătirea împrospătează spălarea pentru umplere.":"NU devine curat – are nevoie de spălare cu sodă și/sau acid."}`; return; }
   if(ty==="cip"){ const i=tinfo(SB,k,Date.now()); out.className="pt-msg "+(i.level>0?"bad":"ok"); out.textContent=i.level>0?`${tk(k).name} NU e gol (${nf(i.level)} L). Golește-l înainte de spălare.`:`${tk(k).name} este gol – poate fi spălat.`; return; }
   if(!(l>=0)||$("#lmL").value===""){ out.className="pt-msg"; out.textContent="Introdu cantitatea ca să vezi nivelul de după mișcare."; return; }
   let msg="",cls="ok"; const chk=(n,v)=>{ const c=tk(n).cap; if(v<0){ cls="bad"; msg+=`${tk(n).name}: nivel NEGATIV (${nf(v)} L) – verifică. `; } else if(v>c){ cls="bad"; msg+=`${tk(n).name}: depășește capacitatea (${nf(v)} / ${nf(c)} L). `; } else msg+=`${tk(n).name}: ${nf(base[n])} → ${nf(v)} L (${Math.round(v/c*100)}%). `; };
@@ -3881,7 +3931,7 @@ function preview(){
 }
 async function saveRow(item,okMsg){ try{ await put(item); toast(okMsg); }catch(e){ toast("Nu s-a putut salva. Reîncearcă."); } }
 async function saveForm(){
-  const ty=M.ty, k=+$("#lmTk").value, to=+$("#lmTo").value, ts=$("#lmTs").value; if(!ts){ toast("Alege data și ora."); return; }
+  const ty=M.ty, tv=String($("#lmTk").value), isEq=ty==="cip"&&tv.startsWith("e:"), k=isEq?0:+tv, to=+$("#lmTo").value, ts=$("#lmTs").value; if(!ts){ toast("Alege data și ora."); return; }
   let l=parseFloat($("#lmL").value); const noL=(ty==="lab"||ty==="cip");
   if(noL) l=0; else if(!(l>=0)||$("#lmL").value===""||(l===0&&ty!=="set")){ toast("Introdu cantitatea în litri."); return; }
   if(ty==="tr"&&k===to){ toast("Alege rezervoare diferite."); return; }
@@ -3889,25 +3939,32 @@ async function saveForm(){
   const ph=$("#lmPh").value===""?"":Number($("#lmPh").value);
   if(ph!==""&&!(ph>=4&&ph<=8)){ toast("pH-ul trebuie să fie între 4 și 8."); return; }
   if(ty==="lab"&&fat===""&&ph===""){ toast("Introdu grăsimea și/sau pH-ul măsurat."); return; }
-  if(ty==="cip"){ const SB=sim(M.edit?M.rows.filter(r=>r.id!==M.edit.id):M.rows); if(tinfo(SB,k,Date.now()).level>0){ toast("Rezervorul nu este gol – golește-l înainte de spălare."); return; } }
+  if(ty==="cip"&&!isEq){ const SB=sim(M.edit?M.rows.filter(r=>r.id!==M.edit.id):M.rows); if(tinfo(SB,k,Date.now()).level>0){ toast("Rezervorul nu este gol – golește-l înainte de spălare."); return; } }
   const v=x=>x===""?"":Number(x);
   const item={id:M.edit?M.edit.id:uid(),type:ty,ts,tank:k,l,created:M.edit?M.edit.created:Date.now(),
     src:(ty==="in"?$("#lmSrc").value:ty==="out"?$("#lmSrc2").value:"").trim(),temp:ty==="in"?v($("#lmTemp").value):"",at:ty==="in"?v($("#lmAt").value):"",who:$("#lmWho").value.trim(),note:$("#lmNote").value.trim()};
   if(ty==="tr") item.to=to;
+  if(ty==="cip"){ item.ag=$("#lmAg").value; if(isEq) item.eq=tv.slice(2); }
   if(ty==="in"||ty==="set"||ty==="lab"){ item.milk=$("#lmMilk").value; item.fat=fat; }
   if(ty==="in"||ty==="lab") item.ph=ph;
   if(ty==="set"&&$("#lmSince").value) item.since=$("#lmSince").value;
   closeM(); await saveRow(item,M.edit?"Mișcare actualizată":"Mișcare înregistrată");
 }
 $("#lmTy").onclick=e=>{ const b=e.target.closest("button"); if(b) setType(b.dataset.t); };
-["#lmL","#lmTk","#lmTo","#lmFat","#lmMilk","#lmPh"].forEach(s=>{ $(s).addEventListener("input",preview); $(s).addEventListener("change",preview); });
+["#lmL","#lmTk","#lmTo","#lmFat","#lmMilk","#lmPh","#lmAg"].forEach(s=>{ $(s).addEventListener("input",preview); $(s).addEventListener("change",preview); });
 $("#lmSave").onclick=saveForm;
 $("#lmDel").onclick=()=>{ const r=M.edit; closeM(); if(r) ask("Ștergi această mișcare?",()=>remove(r.id)); };
 
 function cfgSet(k,val){ if(val===""||val==null) delete M.cfg[k]; else M.cfg[k]=(k==="due"||k==="tank"&&false)?val:(isNaN(Number(val))?val:Number(val)); if(k==="tank") M.cfg.tank=+val; try{ localStorage.setItem(LSC,JSON.stringify(M.cfg)); }catch(e){} }
-$("#tab-lapte").addEventListener("change",ev=>{ const i=ev.target.closest("[data-cfg]"); if(!i) return; cfgSet(i.dataset.cfg,i.value); render(); });
+$("#tab-lapte").addEventListener("change",async ev=>{ const f=ev.target.closest("[data-eqf]"), row=f&&f.closest("[data-eq]");
+  if(f&&row){ const e=eqBy(row.dataset.eq); if(!e) return; let v=f.value; if(f.dataset.eqf==="every") v=Math.max(1,+v||24); if(f.dataset.eqf==="name"&&!String(v).trim()){ toast("Denumirea nu poate fi goală."); render(); return; }
+    await eqSave({...e,[f.dataset.eqf]:typeof v==="string"?v.trim():v}); toast("Salvat"); return; }
+  const i=ev.target.closest("[data-cfg]"); if(!i) return; cfgSet(i.dataset.cfg,i.value); render(); });
 $("#tab-lapte").addEventListener("click",async ev=>{ const b=ev.target.closest("[data-lm]"); if(!b) return; const a=b.dataset.lm;
-  if(a==="new") openForm(b.dataset.t,b.dataset.k?+b.dataset.k:0);
+  if(a==="new") openForm(b.dataset.t,b.dataset.k?(String(b.dataset.k).startsWith("e:")?b.dataset.k:+b.dataset.k):0);
+  else if(a==="eqadd"){ const name=$("#eqNewN").value.trim(); if(!name){ toast("Scrie denumirea traseului."); return; } const all=eqAll();
+    await eqSave({id:"eq_"+uid(),type:"eq",name,how:$("#eqNewH").value,every:Math.max(1,+$("#eqNewE").value||24),ord:Math.max(0,...all.map(e=>e.ord||0))+1}); toast("Traseu adăugat"); }
+  else if(a==="eqdel"){ const e=eqBy(b.closest("[data-eq]").dataset.eq); if(e) ask(`Scoți „${e.name}” din listă? Spălările deja înregistrate rămân în registru.`,()=>eqSave({...e,active:false})); }
   else if(a==="sub"){ M.sub=b.dataset.v; render(); }
   else if(a==="rec"){ const r=M.recs&&M.recs[+b.dataset.i], x=r&&r.acts[+b.dataset.j]; if(x) openPre(x[0],x[1],x[2],x[3]); }
   else if(a==="per"){ M.per=b.dataset.v; render(); } else if(a==="ft"){ M.ftank=+b.dataset.v; render(); } else if(a==="fy"){ M.fty=b.dataset.v; render(); }
@@ -3925,7 +3982,7 @@ async function pdf(pr){
   const S=sim(M.rows), C=cfg(), doc=newDoc(); const now=Date.now();
   const tbl={styles:{font:"DV",fontSize:8.6,cellPadding:1.8,valign:"top",textColor:[29,35,33],lineColor:[210,214,208],lineWidth:0.2},headStyles:{font:"DV",fontStyle:"bold",fillColor:[112,12,48],textColor:255,fontSize:8},alternateRowStyles:{fillColor:[247,248,245]}};
   if(M.sub==="rec"){ const R=recs(S,C); header(doc,"Recomandări sanitație lapte",`Golire · centralizare · spălare · ${fTs(nowTs())}`);
-    doc.autoTable({startY:30,margin:{left:14,right:14,bottom:18},...tbl,head:[["Prioritate","Rezervor","Recomandare","Detalii","Făcut"]],body:R.length?R.map(r=>[{c:"URGENT",a:"Atenție",i:"Recomandat"}[r.p],tk(r.n).name,r.t,r.d,""]):[["","","Nicio recomandare","",""]],columnStyles:{0:{cellWidth:20},1:{cellWidth:22},2:{cellWidth:52},3:{cellWidth:"auto"},4:{cellWidth:14}}});
+    doc.autoTable({startY:30,margin:{left:14,right:14,bottom:18},...tbl,head:[["Prioritate","Rezervor","Recomandare","Detalii","Făcut"]],body:R.length?R.map(r=>[{c:"URGENT",a:"Atenție",i:"Recomandat"}[r.p],r.eq?(eqBy(r.eq)?.name||"Vane / trasee"):tk(r.n).name,r.t,r.d,""]):[["","","Nicio recomandare","",""]],columnStyles:{0:{cellWidth:20},1:{cellWidth:22},2:{cellWidth:52},3:{cellWidth:"auto"},4:{cellWidth:14}}});
     doc.autoTable({startY:doc.lastAutoTable.finalY+6,margin:{left:14,right:14,bottom:18},...tbl,head:[["Regulă","Valoare"]],body:[["Se folosește primul după",C.agePref+" h"],["Vechime maximă lapte",C.ageMax+" h"],["Max. fără răcire (R1/R2)",C.noCool+" h"],["Max. în uz fără spălare",C.cipMax+" h"],["Spălare valabilă pentru umplere",C.cipH+" h"],["Rest mic de centralizat",nf(C.rest)+" L"]]});
     footer(doc); PRINT=pr; await deliver(doc,"Recomandari-lapte.pdf"); return; }
   if(M.sub==="std"){
@@ -3949,7 +4006,7 @@ async function pdf(pr){
   let iT=0,oT=0; rows.forEach(r=>{ if(r.type==="in") iT+=+r.l; if(r.type==="out") oT+=+r.l; });
   const y=doc.lastAutoTable.finalY+8; doc.setFont("DV","bold"); doc.setFontSize(10.5); doc.setTextColor(29,35,33); doc.text(`Mișcări (${rows.length}) · intrat ${nf(iT)} L · ieșit ${nf(oT)} L`,14,y);
   doc.autoTable({startY:y+3,margin:{left:14,right:14,bottom:18},...tbl,head:[["Data / ora","Tip","De unde → unde","Lapte","Litri","Vechime","Nivel după","Detalii"]],
-    body:rows.map(r=>{ const a=S.after.get(r.id)||{}, m=S.meta.get(r.id); const fl=r.type==="in"?`Cisternă → R${r.tank}`:r.type==="out"?`R${r.tank} → pasteurizator`:r.type==="tr"?`R${r.tank} → R${r.to}`:"R"+r.tank;
+    body:rows.map(r=>{ const a=S.after.get(r.id)||{}, m=S.meta.get(r.id); const fl=r.type==="in"?`Cisternă → R${r.tank}`:r.type==="out"?`R${r.tank} → pasteurizator`:r.type==="tr"?`R${r.tank} → R${r.to}`:r.eq?(eqBy(r.eq)?.name||"Vană / traseu"):"R"+r.tank;
       return [fTs(r.ts),TY[r.type].l,fl,milkTxt(r,m),r.type==="lab"||r.type==="cip"?"":(r.type==="in"?"+":r.type==="out"?"-":"")+nf(r.l),m&&m.age!=null&&r.type!=="in"&&r.type!=="lab"?hAge(m.age):"",r.type==="lab"||r.type==="cip"?"":r.type==="tr"?`R${r.tank}: ${nf(a[r.tank])} / R${r.to}: ${nf(a[r.to])}`:nf(a[r.tank])+" L",details(r)]; }),
     styles:{...tbl.styles,fontSize:7.6},columnStyles:{0:{cellWidth:24},1:{cellWidth:15},2:{cellWidth:26},3:{cellWidth:22},4:{cellWidth:14,halign:"right"},5:{cellWidth:14},6:{cellWidth:26,halign:"right"},7:{cellWidth:"auto"}}});
   footer(doc); PRINT=pr; await deliver(doc,"Registru-lapte.pdf");
