@@ -18,7 +18,8 @@ await build({
   logLevel: "warning",
 });
 
-let html = readFileSync("legacy/source.html", "utf8");
+// pe Windows (git autocrlf) fișierul vine cu CRLF – normalizez ca să se găsească marcajele de mai jos
+let html = readFileSync("legacy/source.html", "utf8").replace(/\r\n/g, "\n");
 const must = (s) => {
   if (!html.includes(s)) throw new Error("Nu găsesc în legacy/source.html: " + s.slice(0, 80));
 };

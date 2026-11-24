@@ -995,6 +995,7 @@ nav .ti{display:none}
     <div class="f" id="lmToF" hidden><label>În rezervorul</label><select id="lmTo"></select></div></div>
   <div class="f2" id="lmMilkF" hidden><div class="f"><label>Tip lapte</label><select id="lmMilk"><option value="">(nemodificat)</option><option value="int">Integral (≈4%)</option><option value="deg">Degresat (≈0,05%)</option><option value="std">Standardizat (≈3%)</option></select></div>
     <div class="f" id="lmFatF"><label>Grăsime (%) – din analiza de laborator</label><input type="number" id="lmFat" step="0.01" inputmode="decimal" placeholder="gol = încă neanalizat"></div></div>
+  <div class="f" id="lmPhF" hidden><label id="lmPhL">pH lapte</label><input type="number" id="lmPh" step="0.01" min="4" max="8" inputmode="decimal" placeholder="ex. 6,68"></div>
   <div class="f" id="lmSinceF" hidden><label>Lapte în rezervor din (data/ora – pentru vechime)</label><input type="datetime-local" id="lmSince"></div>
   <div id="lmInF"><div class="f"><label>Cisternă / furnizor</label><input type="text" id="lmSrc" placeholder="ex. B 123 ABC / Ferma X"></div>
     <div class="f2"><div class="f"><label>Temperatură (°C)</label><input type="number" id="lmTemp" step="0.1"></div><div class="f"><label>Aciditate (°T)</label><input type="number" id="lmAt" step="0.1"></div></div></div>
@@ -3439,6 +3440,8 @@ const nowTs=()=>{ const d=new Date(); return iso(d)+"T"+String(d.getHours()).pad
 const fTs=t=>t?fmt(t.slice(0,10))+" "+t.slice(11,16):"";
 const tk=n=>TKS[n-1];
 const visible=()=>!$("#tab-lapte").hidden;
+const hMin=h=>h==null?"":h<1?Math.max(0,Math.round(h*60))+" min":h<6?Math.floor(h)+" h"+(Math.round((h%1)*60)?" "+Math.round((h%1)*60)+" min":""):hAge(h);
+const nph=x=>x==null?"—":(Math.round(x*100)/100).toLocaleString("ro-RO",{minimumFractionDigits:2});
 const hAge=h=>h==null?"":h<1?Math.round(h*60)+" min":h<48?Math.round(h)+" h":(h/24).toFixed(1).replace(".",",")+" zile";
 
 function start(){
@@ -3461,20 +3464,25 @@ function rr(){ if(visible()) render(); }
 /* ---- calcul: loturi FIFO pe rezervor ---- */
 const lev=s=>s.lots.reduce((a,x)=>a+x.l,0)-s.neg;
 function sim(rows){
-  const st={}; TKS.forEach(t=>st[t.n]={lots:[],neg:0,lastCip:null,dirty:false});
+  const st={}; TKS.forEach(t=>st[t.n]={lots:[],neg:0,lastCip:null,dirty:false,ph:null,emptyAt:null});
+  const phv=r=>r.ph===""||r.ph==null||isNaN(Number(r.ph))?null:Number(r.ph);
+  // pH-ul unui amestec: dacă ambele sunt cunoscute se păstrează cel mai mic (prudent), altfel trebuie măsurat din nou
+  const phMix=(a,b)=>a&&b?(a.v<=b.v?a:b):null;
   const after=new Map(), meta=new Map(), hist=[];
   const sorted=rows.slice().sort((a,b)=>String(a.ts).localeCompare(String(b.ts))||(a.created||0)-(b.created||0));
   const lotOf=(r)=>{ const type=r.milk||"int"; const f=r.fat===""||r.fat==null?null:Number(r.fat); return {l:Number(r.l)||0,ts:new Date(r.since||r.ts).getTime(),fat:f,type}; };
   const take=(n,l)=>{ const s=st[n], got=[]; let rem=l; while(rem>1e-6&&s.lots.length){ const lt=s.lots[0], t=Math.min(lt.l,rem); got.push({...lt,l:t}); lt.l-=t; rem-=t; if(lt.l<=1e-6) s.lots.shift(); } if(rem>1e-6) s.neg+=rem; return got; };
   const give=(n,lt)=>{ const s=st[n]; let l=lt.l; if(s.neg>0){ const c=Math.min(s.neg,l); s.neg-=c; l-=c; } if(l>1e-6){ s.lots.push({...lt,l}); s.dirty=true; } };
   const sum=(got,ts)=>{ const tot=got.reduce((a,x)=>a+x.l,0); if(!tot) return null; const kn=got.filter(x=>x.fat!=null), kt=kn.reduce((a,x)=>a+x.l,0); const fat=kt?kn.reduce((a,x)=>a+x.l*x.fat,0)/kt:null; const old=Math.min(...got.map(x=>x.ts)); const ty=[...new Set(got.map(x=>x.type))]; return {fat,type:ty.length>1?"mix":ty[0],age:(new Date(ts).getTime()-old)/36e5}; };
-  for(const r of sorted){ const l=Number(r.l)||0, ms=new Date(r.ts).getTime();
-    if(r.type==="in"){ const lt=lotOf(r); lt.ts=ms; give(r.tank,lt); meta.set(r.id,{fat:lt.fat,type:lt.type,age:0}); }
+  for(const r of sorted){ const l=Number(r.l)||0, ms=new Date(r.ts).getTime(), pre={}; TKS.forEach(t=>pre[t.n]=lev(st[t.n]));
+    if(r.type==="in"){ const lt=lotOf(r); lt.ts=ms; const s=st[r.tank], p=phv(r), np=p==null?null:{v:p,ms}; s.ph=pre[r.tank]>1e-6?phMix(s.ph,np):np; give(r.tank,lt); meta.set(r.id,{fat:lt.fat,type:lt.type,age:0}); }
     else if(r.type==="out"){ meta.set(r.id,sum(take(r.tank,l),r.ts)); }
-    else if(r.type==="tr"){ const got=take(r.tank,l); meta.set(r.id,sum(got,r.ts)); got.forEach(g=>give(r.to,g)); const miss=l-got.reduce((a,x)=>a+x.l,0); if(miss>1e-6) give(r.to,{l:miss,ts:ms,fat:null,type:"int"}); }
-    else if(r.type==="set"){ const s=st[r.tank]; s.lots=[]; s.neg=0; if(l>0){ const lt=lotOf(r); s.lots.push(lt); s.dirty=true; meta.set(r.id,{fat:lt.fat,type:lt.type,age:(ms-lt.ts)/36e5}); } }
-    else if(r.type==="lab"){ const s=st[r.tank]; if(r.fat!==""&&r.fat!=null) s.lots.forEach(x=>x.fat=Number(r.fat)); if(r.milk) s.lots.forEach(x=>x.type=r.milk); meta.set(r.id,{fat:Number(r.fat),type:r.milk||null,age:null}); }
-    else if(r.type==="cip"){ const s=st[r.tank]; s.lots=[]; s.neg=0; s.lastCip=ms; s.dirty=false; }
+    else if(r.type==="tr"){ const d=st[r.to]; d.ph=pre[r.to]>1e-6?phMix(d.ph,st[r.tank].ph):st[r.tank].ph; const got=take(r.tank,l); meta.set(r.id,sum(got,r.ts)); got.forEach(g=>give(r.to,g)); const miss=l-got.reduce((a,x)=>a+x.l,0); if(miss>1e-6) give(r.to,{l:miss,ts:ms,fat:null,type:"int"}); }
+    else if(r.type==="set"){ const s=st[r.tank]; s.lots=[]; s.neg=0; s.ph=null; if(l>0){ const lt=lotOf(r); s.lots.push(lt); s.dirty=true; meta.set(r.id,{fat:lt.fat,type:lt.type,age:(ms-lt.ts)/36e5}); } }
+    else if(r.type==="lab"){ const s=st[r.tank]; if(r.fat!==""&&r.fat!=null) s.lots.forEach(x=>x.fat=Number(r.fat)); if(r.milk) s.lots.forEach(x=>x.type=r.milk); const p=phv(r); if(p!=null&&pre[r.tank]>1e-6) s.ph={v:p,ms}; meta.set(r.id,{fat:r.fat===""||r.fat==null?null:Number(r.fat),type:r.milk||null,age:null}); }
+    else if(r.type==="cip"){ const s=st[r.tank]; s.lots=[]; s.neg=0; s.lastCip=ms; s.dirty=false; s.ph=null; s.emptyAt=null; }
+    // momentul golirii: de aici curge timpul până la spălare
+    TKS.forEach(t=>{ const s=st[t.n], now=lev(s); if(now>1e-6) s.emptyAt=null; else if(pre[t.n]>1e-6){ s.emptyAt=ms; s.ph=null; } });
     const lv={}; TKS.forEach(t=>lv[t.n]=lev(st[t.n])); after.set(r.id,lv); hist.push([ms,lv]); }
   const lv={}; TKS.forEach(t=>lv[t.n]=lev(st[t.n]));
   return {st,lv,after,meta,hist,sorted};
@@ -3485,7 +3493,8 @@ function tinfo(S,n,use){
   const oldest=s.lots.length?Math.min(...s.lots.map(x=>x.ts)):null;
   const ty=[...new Set(s.lots.map(x=>x.type))]; const type=!ty.length?null:ty.length>1?"mix":ty[0];
   const clean=level<=0&&!!s.lastCip&&!s.dirty;
-  return {n,level,fat,unk,oldest,ageH:oldest?(use-oldest)/36e5:null,type,clean,lastCip:s.lastCip,cipH:s.lastCip?(use-s.lastCip)/36e5:null,empty:level<=0};
+  return {n,level,fat,unk,oldest,ageH:oldest?(use-oldest)/36e5:null,type,clean,lastCip:s.lastCip,cipH:s.lastCip?(use-s.lastCip)/36e5:null,empty:level<=0,
+    ph:level>0&&s.ph?s.ph.v:null,phH:level>0&&s.ph?(use-s.ph.ms)/36e5:null,emptyH:level<=0&&!clean&&s.emptyAt?(use-s.emptyAt)/36e5:null};
 }
 
 /* ---- scena 3D ---- */
@@ -3554,7 +3563,7 @@ function animate(lv){
 }
 
 /* ---- planificator de standardizare ---- */
-function cfg(){ const C=Object.assign({V:20000,Ft:3,Fw:"",Fs:"",tank:0,opt:"auto",due:"",ageMax:48,agePref:24,tol:0.05,cipH:24,noCool:12,cipMax:72,rest:1500},M.cfg);
+function cfg(){ const C=Object.assign({V:20000,Ft:3,Fw:"",Fs:"",tank:0,opt:"auto",due:"",ageMax:48,agePref:24,tol:0.05,cipH:24,noCool:12,cipMax:72,rest:1500,washEmpty:2,phMin:6.6,phValid:6,crit:"age"},M.cfg);
   if(!C.due){ const d=new Date(); d.setDate(d.getDate()+1); C.due=iso(d)+"T06:00"; }
   C.dueMs=new Date(C.due).getTime(); return C; }
 const r10=x=>Math.round(x/10)*10;
@@ -3570,7 +3579,8 @@ function plan(S,C){
   // surse
   const lots=[]; const unkT=new Set(); TKS.forEach(t=>{ S.st[t.n].lots.forEach(l=>{ if(l.fat==null) unkT.add(t.n); if(t.n!==tg) lots.push({...l,unk:l.fat==null,fat:l.fat==null?MT[l.type].fat:l.fat,tank:t.n,age:(use-l.ts)/36e5}); }); });
   const whole=lots.filter(l=>l.fat>=3.3), skim=lots.filter(l=>l.fat<=0.6), other=lots.filter(l=>l.fat>0.6&&l.fat<3.3);
-  const okW=whole.filter(l=>l.age<=C.ageMax), okS=skim.filter(l=>l.age<=C.ageMax);
+  const PH={}; TKS.forEach(t=>PH[t.n]=tinfo(S,t.n,now)); const lowPh=n=>PH[n].ph!=null&&PH[n].ph<C.phMin;
+  const okW=whole.filter(l=>l.age<=C.ageMax&&!lowPh(l.tank)), okS=skim.filter(l=>l.age<=C.ageMax&&!lowPh(l.tank));
   const wf=a=>{ const t=a.reduce((x,l)=>x+l.l,0); return t?a.reduce((x,l)=>x+l.l*l.fat,0)/t:null; };
   const Wa=okW.reduce((a,l)=>a+l.l,0), Sa=okS.reduce((a,l)=>a+l.l,0);
   const Fw=C.Fw!==""?+C.Fw:(wf(okW)??(Vc>0&&Fc>=3.3?Fc:MT.int.fat)), Fs=C.Fs!==""?+C.Fs:(wf(okS)??MT.deg.fat);
@@ -3579,10 +3589,13 @@ function plan(S,C){
   TKS.forEach(t=>{ if(t.n===tg) return; const i=tinfo(S,t.n,use); if(i.level<=0) return;
     const ls=lots.filter(l=>l.tank===t.n); const exp=ls.filter(l=>l.age>C.ageMax).reduce((a,l)=>a+l.l,0);
     const ef=i.fat??(i.type?MT[i.type].fat:null), kind=ef==null?"?":ef>=3.3?"Integral":ef<=0.6?"Degresat":"Altul (nu intră în plan)";
-    R.srcs.push({n:t.n,level:i.level,fat:i.fat,unk:i.unk>0,kind,ageH:i.ageH,exp,usable:i.level-exp}); });
+    const bad=lowPh(t.n); R.srcs.push({n:t.n,level:i.level,fat:i.fat,unk:i.unk>0,kind,ageH:i.ageH,exp:bad?i.level:exp,bad,ph:PH[t.n].ph,phH:PH[t.n].phH,usable:bad?0:i.level-exp}); });
   if(!(Fw>Ft&&Ft>Fs)){ R.err=`Grăsimea țintă (${nfat(Ft)}%) trebuie să fie între degresat (${nfat(Fs)}%) și integral (${nfat(Fw)}%).`; return R; }
   const exp=lots.filter(l=>l.age>C.ageMax&&(l.fat>=3.3||l.fat<=0.6));
   if(exp.length){ const by={}; exp.forEach(l=>by[l.tank]=(by[l.tank]||0)+l.l); Object.entries(by).forEach(([n,l])=>R.warns.push(["bad",`${tk(+n).name}: ${nf(l)} L au peste ${C.ageMax} h la ora folosirii – NU intră în plan. Decizie tehnolog (testare / pasteurizare separată / eliminare).`])); }
+  TKS.forEach(t=>{ if(t.n!==tg&&lowPh(t.n)) R.warns.push(["bad",`${t.name}: pH ${nph(PH[t.n].ph)} (sub ${nph(C.phMin)}) – laptele s-a acidifiat și NU intră în plan. Decizie tehnolog.`]);
+    else if(t.n!==tg&&PH[t.n].level>0&&PH[t.n].ageH>C.agePref&&!(PH[t.n].ph!=null&&PH[t.n].phH<=C.phValid)) R.warns.push(["warn",`${t.name}: lapte de ${hAge(PH[t.n].ageH)} fără pH măsurat recent – măsoară pH-ul înainte să-l folosești la mix (🧪 Analiză).`]); });
+  if(T.level>0&&lowPh(tg)) R.warns.push(["bad",`${tk(tg).name}: pH ${nph(T.ph)} (sub ${nph(C.phMin)}) în rezervorul de mixare – nu adăuga lapte peste el. Alege alt rezervor sau decide cu tehnologul.`]);
   if(T.level>0&&T.ageH>C.ageMax) R.warns.push(["bad",`${tk(tg).name}: laptele din rezervor are ${hAge(T.ageH)} la ora folosirii – depășește ${C.ageMax} h.`]);
   if(unkT.size) R.warns.unshift(["warn",`Grăsime NEANALIZATĂ în ${[...unkT].map(n=>tk(n).name).join(", ")} – calculul folosește valori orientative (integral ${nfat(MT.int.fat)}%, degresat ${nfat(MT.deg.fat)}%). Introdu rezultatele de la laborator (🧪 Analiză) ca să fie exact.`]);
   R.unk=unkT.size>0; R.unkT=unkT;
@@ -3627,14 +3640,23 @@ function plan(S,C){
   if(rl>=20){ const dest=TKS.filter(t=>t.n!==tg&&t.cap-lev(S.st[t.n])>=rl).sort((a,b)=>(b.cool-a.cool)||((b.cap-lev(S.st[b.n]))-(a.cap-lev(S.st[a.n]))))[0];
     if(dest) R.steps.push({k:"rem",txt:`Mută ${nf(rl)} L din ${tk(tg).name} în ${dest.name} (prea mult lapte gras în rezervorul de mixare)`,why:`Ca să rămână ${nf(Vc2)} L, la care se poate ajunge la ${nfat(Ft)}% cu degresat.`,act:{type:"tr",tank:tg,to:dest.n,l:rl,note:"Standardizare – scos excedent"},btn:"✓ Mutat"});
     else R.warns.push(["bad",`Trebuie scoși ${nf(rl)} L din ${tk(tg).name}, dar niciun rezervor nu are loc liber.`]); }
-  const alloc=(arr,need)=>{ const by=new Map(); let rem=need; for(const l of arr.slice().sort((a,b)=>a.ts-b.ts)){ if(rem<=1) break; const t=Math.min(l.l,rem); rem-=t; const o=by.get(l.tank)||{tank:l.tank,l:0,oldest:l.ts,fat:0}; o.fat+=t*l.fat; o.l+=t; o.oldest=Math.min(o.oldest,l.ts); by.set(l.tank,o); } return [...by.values()].sort((a,b)=>a.oldest-b.oldest); };
+  const alloc=(arr,need)=>C.crit==="man"?allocMan(arr,need):allocAge(arr,need);
+  // criteriul „mai puține manevre”: iau rezervoare întregi; laptele care trebuie folosit primul (peste vechimea preferată) are tot întâietate
+  const allocMan=(arr,need)=>{ const tm=new Map(); arr.forEach(l=>{ const o=tm.get(l.tank)||{tank:l.tank,lots:[],l:0,oldest:l.ts}; o.lots.push(l); o.l+=l.l; o.oldest=Math.min(o.oldest,l.ts); tm.set(l.tank,o); });
+    const pool=[...tm.values()], out=[]; let rem=need;
+    while(rem>1&&pool.length){ const urg=pool.filter(o=>(use-o.oldest)/36e5>C.agePref).sort((a,b)=>a.oldest-b.oldest), one=pool.filter(o=>o.l>=rem).sort((a,b)=>a.l-b.l||a.oldest-b.oldest);
+      const pk=urg[0]||one[0]||pool.slice().sort((a,b)=>b.l-a.l)[0]; pool.splice(pool.indexOf(pk),1);
+      let t=0,fat=0; for(const l of pk.lots.sort((a,b)=>a.ts-b.ts)){ if(rem-t<=1) break; const x=Math.min(l.l,rem-t); t+=x; fat+=x*l.fat; }
+      rem-=t; out.push({tank:pk.tank,l:t,oldest:pk.oldest,fat}); }
+    return out.sort((a,b)=>a.oldest-b.oldest); };
+  const allocAge=(arr,need)=>{ const by=new Map(); let rem=need; for(const l of arr.slice().sort((a,b)=>a.ts-b.ts)){ if(rem<=1) break; const t=Math.min(l.l,rem); rem-=t; const o=by.get(l.tank)||{tank:l.tank,l:0,oldest:l.ts,fat:0}; o.fat+=t*l.fat; o.l+=t; o.oldest=Math.min(o.oldest,l.ts); by.set(l.tank,o); } return [...by.values()].sort((a,b)=>a.oldest-b.oldest); };
   const mv=(list,kind)=>list.forEach(o=>{ const l=r10(o.l); if(l<20) return; const age=(use-o.oldest)/36e5; const src=tk(o.tank), empties=l>=lev(S.st[o.tank])-30;
     R.steps.push({k:"mv",kind,age,txt:`Mută ${nf(l)} L lapte ${kind==="w"?"integral":"degresat"} (${nfat(o.fat/o.l)}%) din ${src.name} → ${tk(tg).name}`,
       why:`Cel mai vechi lapte din ${src.name}: ${hAge(age)}${age>C.agePref?" – se folosește primul":""}.${empties?` Rezervorul se golește: spală-l (CIP) după.`:""}`,
       how:`Deschide vana ${src.name} și vana ${tk(tg).name} (restul închise), pornește pompa. Pornește agitatorul ${tk(tg).name} când laptele acoperă paletele. Oprește pompa înainte să închizi vanele.`,
       act:{type:"tr",tank:o.tank,to:tg,l,note:`Standardizare ${nfat(Ft)}% – ${kind==="w"?"integral":"degresat"}`},btn:"✓ Mutat"}); });
   const w=alloc(okW,ch.W), s=alloc(okS,ch.S); mv(w,"w"); mv(s,"s");
-  R.remW=ch.W, R.remS=ch.S;
+  R.remW=ch.W, R.remS=ch.S; R.moves=R.steps.filter(x=>x.k==="mv"||x.k==="rem").length;
   const doneVol=Vc2>=V-50||(R.steps.filter(x=>x.k==="mv"||x.k==="rem").length===0);
   R.done=R.steps.filter(x=>x.k==="mv"||x.k==="rem"||x.k==="cip").length===0&&Vc>0;
   R.Vcur=Vc; R.Fcur=Vc>0?Fc:null;
@@ -3649,13 +3671,19 @@ function recs(S,C){
   inf.forEach(i=>{ const t=tk(i.n);
     if(i.level<0) add("c",i.n,`${t.name}: nivel negativ în evidență`,"Mișcările nu se potrivesc cu realitatea. Măsoară nivelul și introdu „Nivel real”.",[["set",i.n,0,0,"✎ Nivel real"]]);
     if(i.level>0){
-      if(i.ageH>C.ageMax) add("c",i.n,`${t.name}: lapte prea vechi (${hAge(i.ageH)})`,`Depășește limita de ${C.ageMax} h. Nu se amestecă cu alt lapte. Decizie tehnolog (analiză / procesare separată / eliminare), apoi golește și spală rezervorul.`,[["out",i.n,0,Math.round(i.level),"➡ Golește"]]);
-      else if(i.ageH>C.agePref) add("a",i.n,`${t.name}: se folosește primul (${hAge(i.ageH)})`,`Laptele trece de ${C.agePref} h. Trage-l primul spre pasteurizator; nu adăuga lapte proaspăt peste el.`,[["out",i.n,0,Math.round(i.level),"➡ Trage tot"]]);
+      if(i.ageH>C.agePref){ const old=i.ageH>C.ageMax, phOk=i.ph!=null&&i.phH<=C.phValid, low=i.ph!=null&&i.ph<C.phMin, L=Math.round(i.level);
+        const meas=["lab",i.n,0,0,"🧪 Măsoară pH"], past=["out",i.n,0,L,"➡ Trage la pasteurizare"];
+        if(low) add("c",i.n,`${t.name}: pH scăzut ${nph(i.ph)} – lapte de ${hAge(i.ageH)}`,`Sub ${nph(C.phMin)}: laptele s-a acidifiat. Nu se amestecă și nu intră în standardizare. Sună tehnologul (procesare separată / eliminare), apoi golește și spală rezervorul.`,[["out",i.n,0,L,"➡ Golește"],meas]);
+        else if(!phOk) add(old?"c":"a",i.n,`${t.name}: lapte vechi (${hAge(i.ageH)}) – măsoară pH-ul`,`${i.ph!=null?`Ultimul pH (${nph(i.ph)}) e de acum ${hAge(i.phH)}, mai vechi de ${C.phValid} h. `:"Nu are pH măsurat. "}Măsoară pH-ul acum. ${old?`Depășește ${C.ageMax} h: nu se amestecă cu alt lapte; cu pH ≥ ${nph(C.phMin)} recomand pasteurizare separată, cu acordul tehnologului.`:`Dacă pH ≥ ${nph(C.phMin)}, pasteurizează-l primul; nu adăuga lapte proaspăt peste el.`}`,[meas]);
+        else if(old) add("c",i.n,`${t.name}: lapte prea vechi (${hAge(i.ageH)}), pH ${nph(i.ph)} – pasteurizare separată`,`Depășește ${C.ageMax} h. pH-ul e încă bun (≥ ${nph(C.phMin)}), dar laptele nu se amestecă cu alt lapte. Recomand pasteurizare separată, acum, cu acordul tehnologului; apoi golește și spală rezervorul.`,[past]);
+        else add("a",i.n,`${t.name}: pasteurizează-l primul (${hAge(i.ageH)}, pH ${nph(i.ph)})`,`Laptele trece de ${C.agePref} h, pH bun. Trage-l primul spre pasteurizator; nu adăuga lapte proaspăt peste el.`,[past]); }
       if(!t.cool&&i.ageH>C.noCool){ const dst=inf.filter(j=>tk(j.n).cool&&j.n!==i.n&&(j.level<=0?(j.clean):(j.type===i.type&&!(j.ageH>C.agePref)))&&tk(j.n).cap-Math.max(0,j.level)>=i.level).sort((a,b)=>a.level-b.level)[0];
         add("a",i.n,`${t.name} nu are răcire: lapte de ${hAge(i.ageH)}`,`Peste ${C.noCool} h fără răcire. ${dst?`Mută-l în ${tk(dst.n).name} (cu răcire${dst.level<=0?", gol și spălat":""}) sau procesează-l primul.`:"Procesează-l primul — niciun rezervor cu răcire nu are loc."}`,dst?[["tr",i.n,dst.n,Math.round(i.level),`⇄ Mută în R${dst.n}`]]:[["out",i.n,0,Math.round(i.level),"➡ Trage tot"]]); }
       if(i.lastCip==null) noCip.push(i.n);
       else if(i.cipH>C.cipMax) add("c",i.n,`${t.name}: în uz de ${hAge(i.cipH)} fără spălare`,`Limita este ${C.cipMax} h între spălări. Golește rezervorul (folosește sau mută laptele) și spală-l.`,[["out",i.n,0,Math.round(i.level),"➡ Golește"]]);
-    } else if(!i.clean) add("a",i.n,`${t.name}: gol, dar nespălat`,"Spală-l acum (CIP), ca să fie gata pentru următoarea umplere.",[["cip",i.n,0,0,"🫧 Am spălat"]]);
+    } else if(!i.clean){ const cip=[["cip",i.n,0,0,"🫧 Am spălat"]];
+      if(i.emptyH!=null&&i.emptyH>C.washEmpty) add("c",i.n,`${t.name}: golit de ${hMin(i.emptyH)} și nespălat – SPALĂ URGENT`,`Un rezervor golit se spală în cel mult ${C.washEmpty} h: resturile de lapte se usucă pe pereți și se înmulțesc bacteriile. Spală-l acum (CIP) și apasă „🫧 Am spălat”.`,cip);
+      else add("a",i.n,`${t.name}: gol, dar nespălat`,i.emptyH!=null?`Golit acum ${hMin(i.emptyH)}. Spală-l în următoarele ${hMin(C.washEmpty-i.emptyH)}, altfel devine urgent.`:"Spală-l acum (CIP), ca să fie gata pentru următoarea umplere.",cip); }
     else if(i.cipH>C.cipH) add("i",i.n,`${t.name}: spălat acum ${hAge(i.cipH)}`,`Spălarea e mai veche de ${C.cipH} h. Clătește/spală din nou înainte de umplere.`,[["cip",i.n,0,0,"🫧 Am spălat"]]);
   });
   if(noCip.length) out.push({p:"i",n:noCip[0],t:`Nicio spălare înregistrată: ${noCip.map(n=>"R"+n).join(", ")}`,d:`Nu se știe de când sunt în uz fără spălare. La următoarea golire spală-le și apasă „🫧 Am spălat”, ca regula de ${C.cipMax} h să poată fi verificată.`,acts:[]});
@@ -3677,7 +3705,7 @@ function recHTML(S,C){
    :`<div class="pt-msg ok" style="font-size:16px;padding:14px">✓ Nicio recomandare acum — rezervoarele respectă regulile de sanitație.</div>`}
   <div class="panel"><div class="ptitle">Reguli de sanitație folosite</div>
     <div class="f2" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
-    ${rule("agePref","Se folosește primul după (h)")}${rule("ageMax","Vechime maximă lapte (h)")}${rule("noCool","Max. fără răcire în R1/R2 (h)")}${rule("cipMax","Max. în uz fără spălare (h)")}${rule("cipH","Spălare valabilă pt. umplere (h)")}${rule("rest","Rest mic de centralizat (L)","100")}</div>
+    ${rule("agePref","Se folosește primul după (h)")}${rule("ageMax","Vechime maximă lapte (h)")}${rule("noCool","Max. fără răcire în R1/R2 (h)")}${rule("cipMax","Max. în uz fără spălare (h)")}${rule("cipH","Spălare valabilă pt. umplere (h)")}${rule("rest","Rest mic de centralizat (L)","100")}${rule("washEmpty","Spălare după golire, max. (h)","0.5")}${rule("phMin","pH minim lapte crud","0.01")}${rule("phValid","pH valabil (h de la măsurare)")}</div>
     <div class="hint">⚠ Valori de lucru propuse de mine. Confirmă-le cu tehnologul și cu procedurile HACCP ale fabricii, apoi modifică-le aici.</div></div>`;
 }
 function recCount(S,C){ try{ return recs(S,C).filter(r=>r.p!=="i").length; }catch(e){ return 0; } }
@@ -3689,7 +3717,7 @@ function periodRows(sorted){
   const d=new Date(); d.setDate(d.getDate()-(M.per==="1"?0:Number(M.per)-1)); const from=iso(d);
   return sorted.filter(r=>r.ts.slice(0,10)>=from);
 }
-function details(r){ const a=[]; if(r.src) a.push((r.type==="out"?"Lot: ":"Cisternă: ")+r.src); if(r.temp!==""&&r.temp!=null) a.push(r.temp+" °C"); if(r.at!==""&&r.at!=null) a.push(r.at+" °T"); if(r.who) a.push(r.who); if(r.note) a.push(r.note); return a.join(" · "); }
+function details(r){ const a=[]; if(r.src) a.push((r.type==="out"?"Lot: ":"Cisternă: ")+r.src); if(r.temp!==""&&r.temp!=null) a.push(r.temp+" °C"); if(r.at!==""&&r.at!=null) a.push(r.at+" °T"); if(r.ph!==""&&r.ph!=null) a.push("pH "+nph(Number(r.ph))); if(r.who) a.push(r.who); if(r.note) a.push(r.note); return a.join(" · "); }
 function milkTxt(r,m){ if(r.type==="cip") return ""; const ty=m&&m.type?MT[m.type].l:""; const f=m&&m.fat!=null&&!isNaN(m.fat)?nfat(m.fat)+"%":(m&&m.type&&r.type!=="lab"?"(neanalizat)":""); return [ty,f].filter(Boolean).join(" "); }
 function ageChip(h,C){ if(h==null) return ""; const cls=h>C.ageMax?"u1":h>C.agePref?"u2":"u4"; return `<span class="pill ${cls}">${hAge(h)}</span>`; }
 function subnav(){ const n=M.last?recCount(M.last,cfg()):0; return `<div class="lm-tabs">${[["stoc","🛢","Rezervoare"],["rec","🧹","Recomandări"],["std","⚖️","Standardizare"],["reg","📒","Registru"]].map(([k,i,l])=>`<button data-lm="sub" data-v="${k}" class="${M.sub===k?"on":""}"><em>${i}</em>${l}${k==="rec"&&n?`<span class="lm-badge">${n}</span>`:""}</button>`).join("")}</div>`; }
@@ -3721,7 +3749,7 @@ function stocHTML(S,C){
   const td=iso(today()); let inT=0,outT=0; M.rows.forEach(r=>{ if(r.ts.slice(0,10)===td){ if(r.type==="in") inT+=Number(r.l)||0; if(r.type==="out") outT+=Number(r.l)||0; } });
   let PR=null; try{ PR=M.rows.length?plan(S,C):null; }catch(e){}
   const RC=M.rows.length?recs(S,C).filter(r=>r.p==="c").length:0;
-  return alertsHTML(PR,true)+(RC?`<div class="lm-al order"><em>🧹</em><div><b>${RC} ${RC===1?"recomandare urgentă":"recomandări urgente"} de sanitație</b><div>Lapte prea vechi sau rezervor în uz prea mult fără spălare.</div></div><button class="lm-b" data-lm="sub" data-v="rec">Vezi recomandările</button></div><div style="height:12px"></div>`:"")+`<div class="lm-kpis">
+  return alertsHTML(PR,true)+(RC?`<div class="lm-al order"><em>🧹</em><div><b>${RC} ${RC===1?"recomandare urgentă":"recomandări urgente"} de sanitație</b><div>Lapte vechi (pH / pasteurizare), rezervor golit și nespălat sau în uz prea mult fără spălare.</div></div><button class="lm-b" data-lm="sub" data-v="rec">Vezi recomandările</button></div><div style="height:12px"></div>`:"")+`<div class="lm-kpis">
     <div class="lm-k"><span>Stoc total</span><b>${nf(total)} L</b><small>din ${nf(capT)} L capacitate</small></div>
     <div class="lm-k"><span>Loc liber</span><b>${nf(Math.max(0,capT-total))} L</b><small>${Math.round(total/capT*100)}% umplut</small></div>
     <div class="lm-k in"><span>Intrat azi</span><b>+${nf(inT)} L</b><small>de la camioane</small></div>
@@ -3762,9 +3790,10 @@ const num=(id,k,l,st="1",u="")=>`<div class="f"><label>${l}</label><input type="
 function stdHTML(S,C){
   const R=plan(S,C), V=+C.V, Ft=+C.Ft;
   const head=`<div class="panel"><div class="ptitle">Standardizare — pregătirea laptelui pentru ziua următoare</div>
-    <div class="hint" style="margin-bottom:8px">Aplicația calculează ce să mute operatorul, din ce rezervoare și în ce ordine (cel mai vechi lapte primul), ca un singur rezervor să aibă <b>${nf(V)} L la ${nfat(Ft)}% grăsime</b>. Planul se recalculează după fiecare pas bifat.</div>
+    <div class="hint" style="margin-bottom:8px">Aplicația calculează ce să mute operatorul, din ce rezervoare și în ce ordine (${C.crit==="man"?"cât mai puține mutări":"cel mai vechi lapte primul"}), ca un singur rezervor să aibă <b>${nf(V)} L la ${nfat(Ft)}% grăsime</b>. Planul se recalculează după fiecare pas bifat.</div>
     <div class="f2" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
-      ${num("","V","Volum țintă (L)","100",nf(V))}${num("","Ft","Grăsime țintă (%)","0.1",nfat(Ft))}
+      ${num("","Ft","Ce vreau să obțin: grăsime (%)","0.1",nfat(Ft))}${num("","V","Volum țintă (L)","100",nf(V))}
+      <div class="f"><label>Criteriu de alegere a laptelui</label><select data-cfg="crit"><option value="age" ${C.crit!=="man"?"selected":""}>Vechime lapte – cel mai vechi primul</option><option value="man" ${C.crit==="man"?"selected":""}>Manevre lapte – cât mai puține mutări</option></select></div>
       <div class="f"><label>Rezervor de mixare</label><select data-cfg="tank"><option value="0">Automat</option>${TKS.map(t=>`<option value="${t.n}" ${+C.tank===t.n?"selected":""}>${t.name} (${nf(t.cap)} L)</option>`).join("")}</select></div>
       <div class="f"><label>Se folosește la</label><input type="datetime-local" data-cfg="due" value="${C.due}"></div></div>
     <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">Setări avansate (grăsimi, vechime, spălare)</summary>
@@ -3775,9 +3804,9 @@ function stdHTML(S,C){
       <div class="hint">Limitele de vechime și de valabilitate a spălării sunt valori de lucru puse de mine – <b>confirmă-le cu tehnologul</b>.</div></details></div>`;
   if(R.err) return head+`<div class="pt-msg bad" style="font-size:14px;padding:10px 12px">${esc(R.err)}</div>`;
   const T=R.T, tg=tk(R.tg), ch=R.ch;
-  const srcRows=R.srcs.map(s=>`<tr><td><b>R${s.n}</b></td><td>${s.kind}</td><td>${s.fat!=null?nfat(s.fat)+"%"+(s.unk?" *":""):`<span class="pill u2">neanalizat</span>`}</td><td style="text-align:right">${nf(s.level)} L</td><td>${ageChip(s.ageH,C)}</td><td style="text-align:right">${s.exp>0?`<span class="pill u1">${nf(s.exp)} L prea vechi</span>`:nf(s.usable)+" L"}</td></tr>`).join("");
+  const srcRows=R.srcs.map(s=>`<tr><td><b>R${s.n}</b></td><td>${s.kind}</td><td>${s.fat!=null?nfat(s.fat)+"%"+(s.unk?" *":""):`<span class="pill u2">neanalizat</span>`}</td><td style="text-align:right">${nf(s.level)} L</td><td>${ageChip(s.ageH,C)}</td><td style="text-align:right">${s.bad?`<span class="pill u1">pH scăzut – exclus</span>`:s.exp>0?`<span class="pill u1">${nf(s.exp)} L prea vechi</span>`:nf(s.usable)+" L"}</td><td>${s.ph!=null?`<span class="pill ${s.bad?"u1":s.phH>C.phValid?"u2":"u4"}" title="măsurat acum ${hAge(s.phH)}">${nph(s.ph)}</span>`:`<span class="hint">—</span>`}</td></tr>`).join("");
   const pr=Math.min(100,Math.max(0,R.Vcur/V*100));
-  const recipe=`<div class="lm-rec"><div><span>Rețetă la ${nf(ch.Vf)} L</span><b>${nf(R.Vc)>0?"+ ":""}${nf(ch.W)} L integral + ${nf(ch.S)} L degresat</b></div><div><span>Grăsime estimată</span><b>${nfat(ch.Ff)}%</b></div><div><span>Rezervor</span><b>${tg.name}${R.auto?" (ales automat)":""}</b></div></div>`;
+  const recipe=`<div class="lm-rec"><div><span>Rețetă la ${nf(ch.Vf)} L</span><b>${nf(R.Vc)>0?"+ ":""}${nf(ch.W)} L integral + ${nf(ch.S)} L degresat</b></div><div><span>Grăsime estimată</span><b>${nfat(ch.Ff)}%</b></div><div><span>Rezervor</span><b>${tg.name}${R.auto?" (ales automat)":""}</b></div><div><span>Mutări de făcut</span><b>${R.moves||0}</b></div></div>`;
   const state=`<div class="lm-card" style="margin-bottom:12px"><div class="lm-ch"><span class="st-n" style="background:${tg.c}">${tg.n}</span><b>${tg.name}</b> <span class="hint">acum: ${nf(R.Vcur)} L${R.Fcur!=null?` la ${nfat(R.Fcur)}%`:""} · țintă ${nf(V)} L la ${nfat(Ft)}%</span></div><div class="lm-bar"><i style="width:${pr}%;background:${tg.c}"></i></div>${recipe}</div>`;
   const warns=R.warns.map(w=>`<div class="pt-msg ${w[0]==="bad"?"bad":"warn"}" style="font-size:13.5px;padding:7px 10px">${w[0]==="bad"?"⚠ ":"! "}${esc(w[1])}</div>`).join("");
   const opts=R.opts.length?`<div class="panel" style="border-color:#f0dc9a;background:#fffdf2"><div class="ptitle">Nu e destul degresat sau integral</div>
@@ -3800,7 +3829,7 @@ function stdHTML(S,C){
       <li class="lm-st"><div><b>Amestecă și ia proba</b><div class="hint">După ultima mutare: agitatorul ${tg.name} merge ≥ 15 min (de confirmat), apoi laboratorul măsoară grăsimea. Introdu rezultatul mai jos – dacă nu e la țintă, planul calculează corecția.</div></div>
       <div style="display:flex;gap:6px;align-items:center"><input type="number" id="lmLabFat" step="0.01" placeholder="% grăsime" style="width:96px;min-height:34px"><button class="btn sm" data-lm="lab">🧪 Salvează</button></div></li></ol></div>`;
   }
-  const srcT=R.srcs.length?`<div class="panel"><div class="ptitle">Surse disponibile (vechime la ora folosirii: ${fTs(C.due)})</div><div style="overflow-x:auto"><table class="tt"><tr><th>Rezervor</th><th>Tip</th><th>Grăsime</th><th style="text-align:right">Litri</th><th>Vechime</th><th style="text-align:right">Utilizabil</th></tr>${srcRows}</table></div></div>`:"";
+  const srcT=R.srcs.length?`<div class="panel"><div class="ptitle">Surse disponibile (vechime la ora folosirii: ${fTs(C.due)})</div><div style="overflow-x:auto"><table class="tt"><tr><th>Rezervor</th><th>Tip</th><th>Grăsime</th><th style="text-align:right">Litri</th><th>Vechime</th><th style="text-align:right">Utilizabil</th><th>pH</th></tr>${srcRows}</table></div></div>`:"";
   M.plan=R;
   return head+alertsHTML(R)+state+warns+opts+steps+srcT;
 }
@@ -3820,8 +3849,8 @@ function drawChart(S){
 const opt=(sel,skip)=>TKS.filter(t=>t.n!==skip).map(t=>`<option value="${t.n}" ${t.n===sel?"selected":""}>${t.name} (${t.cap.toLocaleString("ro-RO")} L)</option>`).join("");
 function setType(ty){ M.ty=ty; $("#lmTy").querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.t===ty));
   $("#lmToF").hidden=ty!=="tr"; $("#lmInF").hidden=ty!=="in"; $("#lmOutF").hidden=ty!=="out";
-  $("#lmMilkF").hidden=!(ty==="in"||ty==="set"||ty==="lab"); $("#lmSinceF").hidden=ty!=="set"; $("#lmLF").hidden=(ty==="lab"||ty==="cip");
-  $("#lmFatF").querySelector("label").textContent=ty==="lab"?"Grăsime măsurată (%) *":"Grăsime (%) – gol = implicit";
+  $("#lmMilkF").hidden=!(ty==="in"||ty==="set"||ty==="lab"); $("#lmPhF").hidden=!(ty==="in"||ty==="lab"); $("#lmPhL").textContent=ty==="lab"?"pH lapte (măsurat acum)":"pH lapte la recepție"; $("#lmSinceF").hidden=ty!=="set"; $("#lmLF").hidden=(ty==="lab"||ty==="cip");
+  $("#lmFatF").querySelector("label").textContent=ty==="lab"?"Grăsime măsurată (%)":"Grăsime (%) – gol = implicit";
   $("#lmTkL").textContent=ty==="tr"?"Din rezervorul":"Rezervor"; $("#lmLL").textContent=ty==="set"?"Nivel măsurat / real acum (litri)":"Cantitate (litri)"; preview(); }
 function openForm(ty,k,row){
   M.edit=row||null; $("#lmH").textContent=row?"Editează mișcarea":"Mișcare lapte";
@@ -3829,12 +3858,13 @@ function openForm(ty,k,row){
   $("#lmTo").innerHTML=opt(row&&row.to?row.to:(k?(k%4)+1:2));
   $("#lmTs").value=row?row.ts:nowTs(); $("#lmL").value=row?row.l:""; $("#lmSrc").value=row?row.src||"":""; $("#lmSrc2").value=row?row.src||"":"";
   $("#lmTemp").value=row&&row.temp!=null?row.temp:""; $("#lmAt").value=row&&row.at!=null?row.at:""; $("#lmWho").value=row?row.who||"":(window.__ROLE?.name||""); $("#lmNote").value=row?row.note||"":"";
-  $("#lmMilk").value=row&&row.milk?row.milk:(ty==="lab"?"":"int"); $("#lmFat").value=row&&row.fat!==""&&row.fat!=null?row.fat:""; $("#lmSince").value=row?row.since||"":"";
+  $("#lmMilk").value=row&&row.milk?row.milk:(ty==="lab"?"":"int"); $("#lmFat").value=row&&row.fat!==""&&row.fat!=null?row.fat:""; $("#lmSince").value=row?row.since||"":""; $("#lmPh").value=row&&row.ph!==""&&row.ph!=null?row.ph:"";
   $("#lmDel").hidden=!row; setType(row?row.type:ty); openM("#mdMilk"); }
 function preview(){
   const l=parseFloat($("#lmL").value), ty=M.ty, k=+$("#lmTk").value, to=+$("#lmTo").value, S=M.last||sim(M.rows); const out=$("#lmPrev");
   const SB=M.edit?sim(M.rows.filter(r=>r.id!==M.edit.id)):S, base=SB.lv;
-  if(ty==="lab"){ const f=parseFloat($("#lmFat").value); const i=tinfo(SB,k,Date.now()); out.className="pt-msg"; out.textContent=i.level>0?`${tk(k).name}: acum ${nf(i.level)} L${i.fat!=null?` la ${nfat(i.fat)}%`:""}. ${isNaN(f)?"Introdu grăsimea măsurată.":"După analiză: "+nfat(f)+"%."}`:`${tk(k).name} este gol – nu are ce analiza.`; return; }
+  if(ty==="lab"){ const f=parseFloat($("#lmFat").value), ph=parseFloat($("#lmPh").value), C=cfg(); const i=tinfo(SB,k,Date.now()); const low=!isNaN(ph)&&ph<C.phMin; out.className="pt-msg"+(i.level>0&&low?" bad":"");
+    out.textContent=i.level>0?`${tk(k).name}: acum ${nf(i.level)} L${i.fat!=null?` la ${nfat(i.fat)}%`:""}${i.ageH!=null?`, lapte de ${hAge(i.ageH)}`:""}. ${isNaN(f)&&isNaN(ph)?"Introdu grăsimea și/sau pH-ul măsurat.":[!isNaN(f)?"Grăsime: "+nfat(f)+"%":"",!isNaN(ph)?"pH: "+nph(ph)+(low?` – SUB ${nph(C.phMin)}: nu se amestecă, sună tehnologul.`:" – bun."):""].filter(Boolean).join(" · ")}`:`${tk(k).name} este gol – nu are ce analiza.`; return; }
   if(ty==="cip"){ const i=tinfo(SB,k,Date.now()); out.className="pt-msg "+(i.level>0?"bad":"ok"); out.textContent=i.level>0?`${tk(k).name} NU e gol (${nf(i.level)} L). Golește-l înainte de spălare.`:`${tk(k).name} este gol – poate fi spălat.`; return; }
   if(!(l>=0)||$("#lmL").value===""){ out.className="pt-msg"; out.textContent="Introdu cantitatea ca să vezi nivelul de după mișcare."; return; }
   let msg="",cls="ok"; const chk=(n,v)=>{ const c=tk(n).cap; if(v<0){ cls="bad"; msg+=`${tk(n).name}: nivel NEGATIV (${nf(v)} L) – verifică. `; } else if(v>c){ cls="bad"; msg+=`${tk(n).name}: depășește capacitatea (${nf(v)} / ${nf(c)} L). `; } else msg+=`${tk(n).name}: ${nf(base[n])} → ${nf(v)} L (${Math.round(v/c*100)}%). `; };
@@ -3848,18 +3878,21 @@ async function saveForm(){
   if(noL) l=0; else if(!(l>=0)||$("#lmL").value===""||(l===0&&ty!=="set")){ toast("Introdu cantitatea în litri."); return; }
   if(ty==="tr"&&k===to){ toast("Alege rezervoare diferite."); return; }
   const fat=$("#lmFat").value===""?"":Number($("#lmFat").value);
-  if(ty==="lab"&&fat===""){ toast("Introdu grăsimea măsurată."); return; }
+  const ph=$("#lmPh").value===""?"":Number($("#lmPh").value);
+  if(ph!==""&&!(ph>=4&&ph<=8)){ toast("pH-ul trebuie să fie între 4 și 8."); return; }
+  if(ty==="lab"&&fat===""&&ph===""){ toast("Introdu grăsimea și/sau pH-ul măsurat."); return; }
   if(ty==="cip"){ const SB=sim(M.edit?M.rows.filter(r=>r.id!==M.edit.id):M.rows); if(tinfo(SB,k,Date.now()).level>0){ toast("Rezervorul nu este gol – golește-l înainte de spălare."); return; } }
   const v=x=>x===""?"":Number(x);
   const item={id:M.edit?M.edit.id:uid(),type:ty,ts,tank:k,l,created:M.edit?M.edit.created:Date.now(),
     src:(ty==="in"?$("#lmSrc").value:ty==="out"?$("#lmSrc2").value:"").trim(),temp:ty==="in"?v($("#lmTemp").value):"",at:ty==="in"?v($("#lmAt").value):"",who:$("#lmWho").value.trim(),note:$("#lmNote").value.trim()};
   if(ty==="tr") item.to=to;
   if(ty==="in"||ty==="set"||ty==="lab"){ item.milk=$("#lmMilk").value; item.fat=fat; }
+  if(ty==="in"||ty==="lab") item.ph=ph;
   if(ty==="set"&&$("#lmSince").value) item.since=$("#lmSince").value;
   closeM(); await saveRow(item,M.edit?"Mișcare actualizată":"Mișcare înregistrată");
 }
 $("#lmTy").onclick=e=>{ const b=e.target.closest("button"); if(b) setType(b.dataset.t); };
-["#lmL","#lmTk","#lmTo","#lmFat","#lmMilk"].forEach(s=>{ $(s).addEventListener("input",preview); $(s).addEventListener("change",preview); });
+["#lmL","#lmTk","#lmTo","#lmFat","#lmMilk","#lmPh"].forEach(s=>{ $(s).addEventListener("input",preview); $(s).addEventListener("change",preview); });
 $("#lmSave").onclick=saveForm;
 $("#lmDel").onclick=()=>{ const r=M.edit; closeM(); if(r) ask("Ștergi această mișcare?",()=>remove(r.id)); };
 
